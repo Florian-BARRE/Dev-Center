@@ -13,7 +13,7 @@ const plugin: OpenClawPluginDefinition = {
     api.registerCommand({
       name: "idh_ping",
       description: "IDH plugin health check",
-      handler: async () => ({ text: "IDH plugin loaded ✓" }),
+      handler: async () => ({ text: "IDH plugin loaded (ok)" }),
     });
   },
 };
