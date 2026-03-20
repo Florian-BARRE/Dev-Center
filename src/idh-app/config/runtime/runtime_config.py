@@ -69,6 +69,8 @@ class RUNTIME_CONFIG(EnvConfigLoader):
         pathlib.Path(env("OPENCLAW_CONFIG_DIR", default="/openclaw-config"))
         / "openclaw.json"
     )
+    PATH_CODEX_DIR = pathlib.Path(env("CODEX_DIR", default="/home/app/.codex"))
+    PATH_CLAUDE_DIR = pathlib.Path(env("CLAUDE_DIR", default="/home/app/.claude"))
     PATH_ROOT_DIR_FRONTEND = PATH_ROOT_DIR / "frontend" / "dist"
 
 
