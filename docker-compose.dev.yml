@@ -1,19 +1,64 @@
 # Development overrides for IA-Dev-Hub.
 # Usage: docker compose -f docker-compose.yml -f docker-compose.dev.yml up
 #
-# Docker Compose MERGES service definitions from both files.
-# The base docker-compose.yml env_file, ports, networks, depends_on, and volumes
-# are preserved automatically. List fields (volumes, environment) are APPENDED,
-# not replaced — so production volumes remain alongside any dev-only additions.
+# This overlay redirects all ~/iah/* data directories to ./dev_data/ so that
+# nothing is written to ~/iah/ during local development. Host credentials
+# (~/.claude, ~/.codex, ~/.ssh) remain mounted read-only from the host.
+#
+# Docker Compose merges volumes by container target path — entries below
+# replace the corresponding production mounts in docker-compose.yml that
+# share the same target path.
+#
+# Prerequisites:
+#   cp dev_data/.env.example dev_data/.env
+#   # then fill in the required secrets (IDH_WEBHOOK_SECRET etc.)
 
 services:
-  idh-app:
-    # Override: mount source code so edits are reflected without rebuilding.
-    # The Dockerfile image is still used for the Python venv and Node CLI tools.
+  openclaw-gateway:
+    # Redirect data volumes: ~/iah/* → ./dev_data/*
     volumes:
+      # Replaces ~/iah/config:/home/node/.openclaw
+      - ./dev_data/config:/home/node/.openclaw
+      # Replaces ~/iah/workspaces:/workspaces
+      - ./dev_data/workspaces:/workspaces
+    # Override env file: make ~/iah/.env optional, load dev secrets from ./dev_data/.env.
+    # The path-based deduplication in Docker Compose v2 ensures ~/iah/.env is treated
+    # as required: false (override wins for the same path), then dev_data/.env is appended.
+    env_file:
+      - path: ~/iah/.env
+        required: false
+      - path: ./dev_data/.env
+        required: false
+
+  idh-app:
+    # Redirect data volumes: ~/iah/* → ./dev_data/*
+    # Also mounts source code for live-reload without rebuilding the image.
+    volumes:
+      # Replaces ~/iah/workspaces:/workspaces
+      - ./dev_data/workspaces:/workspaces
+      # Replaces ~/iah/state:/data
+      - ./dev_data/state:/data
+      # Replaces ~/iah/rules:/rules:ro
+      - ./dev_data/rules:/rules:ro
+      # Replaces ~/iah/config:/openclaw-config
+      - ./dev_data/config:/openclaw-config
+      # Source-code hot-reload mount (dev only)
       - ./src/idh-app:/app/idh-app
+    # Override env file: make ~/iah/.env optional, load dev secrets from ./dev_data/.env.
+    env_file:
+      - path: ~/iah/.env
+        required: false
+      - path: ./dev_data/.env
+        required: false
     environment:
-      # Enable uvicorn --reload (checked in entrypoint.sh via DEV_MODE)
+      # Enable uvicorn --reload (detected via DEV_MODE in the container entrypoint)
       - DEV_MODE=true
+      # Override FastAPI and logging defaults for verbose local development
       - FASTAPI_DEBUG_MODE=true
       - LOGGING_CONSOLE_LEVEL=DEBUG
+
+  code-server:
+    # Redirect workspace volume: ~/iah/workspaces → ./dev_data/workspaces
+    volumes:
+      # Replaces ~/iah/workspaces:/workspaces
+      - ./dev_data/workspaces:/workspaces
