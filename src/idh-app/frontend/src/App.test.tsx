@@ -5,6 +5,6 @@ import App from "./App";
 describe("App", () => {
   it("renders without crashing", () => {
     render(<App />);
-    expect(screen.getByText(/IA-Dev-Hub/i)).toBeTruthy();
+    expect(screen.getByText(/IA-Dev-Hub/i)).toBeInTheDocument();
   });
 });
