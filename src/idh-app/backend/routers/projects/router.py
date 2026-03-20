@@ -64,7 +64,7 @@ async def delete_project(group_id: str) -> ProjectResponse:
     Raises:
         HTTPException: 404 if the project does not exist.
     """
-    # 1. Verify the project exists
+    # 1. Verify the project exists before deletion
     project = CONTEXT.state_manager.get_project(group_id)
     if project is None:
         raise HTTPException(status_code=404, detail=f"Project '{group_id}' not found")
@@ -72,12 +72,10 @@ async def delete_project(group_id: str) -> ProjectResponse:
     # 2. Stop the bridge if active
     await CONTEXT.bridge_manager.stop_bridge(group_id)
 
-    # 3. Remove from state
-    state = CONTEXT.state_manager.load()
-    state.projects.pop(group_id, None)
-    CONTEXT.state_manager.save(state)
+    # 3. Atomically remove from state
+    CONTEXT.state_manager.delete_project(group_id)
 
-    # 4. Fire deletion webhook
+    # 4. Fire deletion webhook (no-op if URL not configured)
     CONTEXT.webhook_client.project_deleted(
         group_id=group_id, project_id=project.project_id
     )

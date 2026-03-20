@@ -85,7 +85,7 @@ async def test_stop_bridge_clears_state(
 
     # Seed state with an active bridge
     sm = StateManager(state_path=state_path)
-    expires = (datetime.datetime.utcnow() + datetime.timedelta(hours=8)).isoformat()
+    expires = (datetime.datetime.now(datetime.UTC) + datetime.timedelta(hours=8)).isoformat()
     sm.upsert_project(
         "g1",
         Project(
@@ -123,7 +123,7 @@ async def test_watchdog_kills_expired_bridges(
 
     # Seed state with an expired bridge
     sm = StateManager(state_path=state_path)
-    past = (datetime.datetime.utcnow() - datetime.timedelta(hours=1)).isoformat()
+    past = (datetime.datetime.now(datetime.UTC) - datetime.timedelta(hours=1)).isoformat()
     sm.upsert_project(
         "g1",
         Project(
@@ -160,7 +160,7 @@ async def test_watchdog_leaves_active_bridges_alone(
     workspace = tmp_path / "ws"
 
     sm = StateManager(state_path=state_path)
-    future = (datetime.datetime.utcnow() + datetime.timedelta(hours=4)).isoformat()
+    future = (datetime.datetime.now(datetime.UTC) + datetime.timedelta(hours=4)).isoformat()
     sm.upsert_project(
         "g1",
         Project(

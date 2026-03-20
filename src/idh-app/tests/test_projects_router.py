@@ -75,3 +75,33 @@ def test_get_project_returns_project(client: TestClient, monkeypatch: pytest.Mon
     response = client.get("/api/v1/projects/g1")
     assert response.status_code == 200
     assert response.json()["projectId"] == "p1"
+
+
+def test_delete_project_success(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    """DELETE /projects/{group_id} returns 200 with the deleted project data."""
+    from backend.context import CONTEXT
+
+    project = Project(group_id="g1", project_id="p1", repo_url="https://github.com/x/y")
+
+    class FakeStateManager:
+        def get_project(self, group_id: str):
+            return project if group_id == "g1" else None
+
+        def delete_project(self, group_id: str) -> bool:
+            return True
+
+    class FakeBridgeManager:
+        async def stop_bridge(self, group_id: str) -> None:
+            pass
+
+    class FakeWebhookClient:
+        def project_deleted(self, group_id: str, project_id: str):
+            return None
+
+    monkeypatch.setattr(CONTEXT, "state_manager", FakeStateManager())
+    monkeypatch.setattr(CONTEXT, "bridge_manager", FakeBridgeManager())
+    monkeypatch.setattr(CONTEXT, "webhook_client", FakeWebhookClient())
+
+    response = client.delete("/api/v1/projects/g1")
+    assert response.status_code == 200
+    assert response.json()["projectId"] == "p1"

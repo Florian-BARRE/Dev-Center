@@ -114,3 +114,22 @@ class StateManager(LoggerClass):
             state = self._read()
             state.projects[group_id] = project
             self._write(state)
+
+    def delete_project(self, group_id: str) -> bool:
+        """
+        Remove a project from state atomically under a file lock.
+
+        Args:
+            group_id (str): Telegram group ID to remove.
+
+        Returns:
+            bool: True if the project was removed, False if it was not found.
+        """
+        # 1. Load, remove, and save atomically
+        with self._lock:
+            state = self._read()
+            if group_id not in state.projects:
+                return False
+            state.projects.pop(group_id)
+            self._write(state)
+            return True

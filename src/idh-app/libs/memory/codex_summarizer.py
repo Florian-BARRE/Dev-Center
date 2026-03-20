@@ -3,6 +3,7 @@
 
 # ====== Standard Library Imports ======
 import asyncio
+import os
 import pathlib
 
 # ====== Third-Party Library Imports ======
@@ -53,7 +54,7 @@ class CodexSummarizer(LoggerClass):
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             cwd=str(workspace),
-            env={"CODEX_HOME": str(self._codex_dir)},
+            env=os.environ | {"CODEX_HOME": str(self._codex_dir)},
         )
 
         # 2. Wait for completion and capture output

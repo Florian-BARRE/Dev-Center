@@ -63,13 +63,13 @@ class BridgeManager(LoggerClass):
             str: ISO-8601 formatted UTC expiry timestamp.
         """
         return (
-            datetime.datetime.utcnow()
+            datetime.datetime.now(datetime.UTC)
             + datetime.timedelta(hours=self._bridge_ttl_hours)
         ).isoformat()
 
     def _kill_bridge(self, pid: int) -> None:
         """
-        Send SIGTERM to a bridge process, ignoring ProcessLookupError.
+        Send SIGTERM to a bridge process, ignoring process-not-found and permission errors.
 
         Args:
             pid (int): OS process ID of the bridge subprocess.
@@ -79,6 +79,8 @@ class BridgeManager(LoggerClass):
             self.logger.info(f"Sent SIGTERM to bridge PID {pid}")
         except ProcessLookupError:
             self.logger.warning(f"Bridge PID {pid} already gone")
+        except PermissionError:
+            self.logger.warning(f"No permission to signal bridge PID {pid} — PID may have been recycled")
 
     # ──────────────────────────── Protected (watchdog) ──────────────────────
 
@@ -91,7 +93,7 @@ class BridgeManager(LoggerClass):
         """
         # 1. Load current state
         state = self._state_manager.load()
-        now = datetime.datetime.utcnow()
+        now = datetime.datetime.now(datetime.UTC)
 
         # 2. Iterate all projects and kill expired bridges
         for group_id, project in state.projects.items():
@@ -127,11 +129,17 @@ class BridgeManager(LoggerClass):
             group_id (str): Telegram group ID that owns the project.
             workspace (pathlib.Path): Project workspace directory.
         """
-        # 1. Compute expiry and build the bridge command
+        # 1. Check if a bridge is already running for this project
+        project = self._state_manager.get_project(group_id)
+        if project is not None and project.bridge is not None:
+            self.logger.info(f"Bridge already running for group '{group_id}' (PID {project.bridge.pid}) — skipping")
+            return
+
+        # 2. Compute expiry and build the bridge command
         expires = self._expires_at()
         projects_dir = self._claude_dir / "projects"
 
-        # 2. Launch the claude remote-control subprocess
+        # 3. Launch the claude remote-control subprocess
         self.logger.info(f"Starting bridge for group '{group_id}' in '{workspace}'")
         proc = await asyncio.create_subprocess_exec(
             "claude",
@@ -142,7 +150,7 @@ class BridgeManager(LoggerClass):
             "--claude-projects-dir", str(projects_dir),
         )
 
-        # 3. Persist the bridge state
+        # 4. Persist the bridge state
         bridge = BridgeState(pid=proc.pid, workspace=str(workspace), expires_at=expires)
         project = self._state_manager.get_project(group_id)
         if project is not None:
