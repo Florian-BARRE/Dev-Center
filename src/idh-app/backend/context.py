@@ -10,6 +10,13 @@ from loggerplusplus import LoggerPlusPlus
 
 # ====== Internal Project Imports ======
 from config import RUNTIME_CONFIG
+from libs.bridge.bridge_manager import BridgeManager
+from libs.git_ops.git_manager import GitManager
+from libs.memory.codex_summarizer import CodexSummarizer
+from libs.memory.memory_manager import MemoryManager
+from libs.openclaw_config.config_writer import OpenClawConfigWriter
+from libs.state.state_manager import StateManager
+from libs.webhook.webhook_client import WebhookClient
 
 
 class CONTEXT:
@@ -25,3 +32,12 @@ class CONTEXT:
 
     logger: LoggerPlusPlus
     RUNTIME_CONFIG: Type[RUNTIME_CONFIG]
+
+    # ── Services ──
+    state_manager: StateManager
+    openclaw_writer: OpenClawConfigWriter
+    git_manager: GitManager
+    webhook_client: WebhookClient
+    bridge_manager: BridgeManager
+    memory_manager: MemoryManager
+    codex_summarizer: CodexSummarizer
