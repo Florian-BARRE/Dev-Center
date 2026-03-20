@@ -6,7 +6,7 @@ from fastapi import FastAPI
 
 # ====== Local Project Imports ======
 from .lifespan import lifespan
-from .routers import agents_router, bridge_router, health_router, projects_router, settings_router
+from .routers import agents_router, bridge_router, health_router, memory_router, projects_router, settings_router
 
 
 def create_app(app_name: str, debug: bool) -> FastAPI:
@@ -30,6 +30,7 @@ def create_app(app_name: str, debug: bool) -> FastAPI:
     app.include_router(router=settings_router, prefix=api_prefix)
     app.include_router(router=agents_router, prefix=api_prefix)
     app.include_router(router=bridge_router, prefix=api_prefix)
+    app.include_router(router=memory_router, prefix=api_prefix)
 
     return app
 

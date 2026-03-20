@@ -13,6 +13,9 @@ from .agents.router import router as agents_router
 # ------------------- Bridge ---------------------- #
 from .bridge.router import router as bridge_router
 
+# ------------------- Memory ---------------------- #
+from .memory.router import router as memory_router
+
 # ------------------- Public API ------------------ #
 __all__ = [
     "health_router",
@@ -20,4 +23,5 @@ __all__ = [
     "settings_router",
     "agents_router",
     "bridge_router",
+    "memory_router",
 ]
