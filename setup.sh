@@ -62,7 +62,7 @@ IDH_APP_PORT=8000
 CODE_SERVER_PORT=8443
 
 # --- FastAPI ---
-FASTAPI_APP_NAME=IDH App
+FASTAPI_APP_NAME="IDH App"
 FASTAPI_DEBUG_MODE=false
 CORS_ALLOWED_ORIGINS=*
 
@@ -78,12 +78,16 @@ else
     warn ".env already exists at $ENV_FILE -- skipping."
 fi
 
+# Source env vars for use throughout the rest of the script.
+# On first run these are already in scope from the heredoc block above,
+# but on re-runs (when .env was pre-existing) the variables are not in scope.
+# shellcheck disable=SC1090
+source "$ENV_FILE"
+
 # --- Step 3: Generate minimal openclaw.json if not present ---
 OPENCLAW_JSON="$IAH_DIR/config/openclaw.json"
 if [ ! -f "$OPENCLAW_JSON" ]; then
     log "Generating openclaw.json ..."
-    # shellcheck disable=SC1090
-    source "$ENV_FILE"
     cat > "$OPENCLAW_JSON" <<EOF
 {
   "gateway": {
@@ -111,13 +115,13 @@ fi
 
 # --- Step 4: Pre-populate GitHub known_hosts ---
 KNOWN_HOSTS="$HOME/.ssh/known_hosts"
-if [ -f "$HOME/.ssh/id_ed25519" ]; then
+if ls "$HOME/.ssh"/id_* > /dev/null 2>&1; then
     if ! grep -q "github.com" "$KNOWN_HOSTS" 2>/dev/null; then
         log "Adding GitHub to known_hosts ..."
         ssh-keyscan github.com >> "$KNOWN_HOSTS" 2>/dev/null
     fi
 else
-    warn "No SSH key at ~/.ssh/id_ed25519 -- git clone via SSH will not work."
+    warn "No SSH private key found in ~/.ssh/ -- git clone via SSH will not work."
     warn "Generate one: ssh-keygen -t ed25519 -C 'your@email.com'"
 fi
 
@@ -164,13 +168,16 @@ docker compose up -d --build
 
 log "Waiting for services to be healthy ..."
 # Poll idh-app health endpoint instead of sleeping a fixed duration.
-for i in $(seq 1 30); do
+HEALTHY=false
+for i in {1..30}; do
     if curl -sf "http://localhost:${IDH_APP_PORT:-8000}/api/v1/health/ping" > /dev/null 2>&1; then
         log "idh-app is healthy."
+        HEALTHY=true
         break
     fi
     sleep 3
 done
+[ "$HEALTHY" = true ] || err "idh-app did not become healthy after 90s -- check: docker compose logs idh-app"
 
 # --- Step 7: Install IDH plugin ---
 log "Installing IDH plugin in openclaw-gateway ..."
