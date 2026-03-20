@@ -1,0 +1,46 @@
+[project]
+name = "idh-app"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.32.0",
+    "loggerplusplus>=1.0.0",
+    "configplusplus>=0.1.1",
+    "filelock>=3.16.0",
+    "pyfiglet>=0.8.post1",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.24.0",
+    "pytest-env>=1.1.0",
+    "httpx>=0.27.0",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+# Set required env vars BEFORE any module import (prevents RUNTIME_CONFIG class
+# body from raising on missing required env vars during test collection).
+env = [
+    "IDH_WEBHOOK_SECRET=test-secret-for-pytest-only",
+    "DATA_DIR=/tmp/idh-test-data",
+    "WORKSPACES_DIR=/tmp/idh-test-workspaces",
+    "RULES_DIR=/tmp/idh-test-rules",
+    "OPENCLAW_CONFIG_DIR=/tmp/idh-test-openclaw",
+    "FASTAPI_APP_NAME=IDH Test",
+    "FASTAPI_DEBUG_MODE=false",
+    "CORS_ALLOWED_ORIGINS=*",
+    "BRIDGE_TTL_HOURS=8",
+    "OPENCLAW_GATEWAY_PORT=18789",
+    "LOGGING_CONSOLE_LEVEL=WARNING",
+    "LOGGING_FILE_LEVEL=DEBUG",
+    "LOGGING_ENABLE_CONSOLE=false",
+    "LOGGING_ENABLE_FILE=false",
+    "LOGGING_LPP_FORMAT=ShortFormat",
+]
+
+[tool.ruff.lint]
+ignore = ["F541"]
