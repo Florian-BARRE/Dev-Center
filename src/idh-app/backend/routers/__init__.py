@@ -10,10 +10,14 @@ from .settings.router import router as settings_router
 # ------------------- Agents ---------------------- #
 from .agents.router import router as agents_router
 
+# ------------------- Bridge ---------------------- #
+from .bridge.router import router as bridge_router
+
 # ------------------- Public API ------------------ #
 __all__ = [
     "health_router",
     "projects_router",
     "settings_router",
     "agents_router",
+    "bridge_router",
 ]
