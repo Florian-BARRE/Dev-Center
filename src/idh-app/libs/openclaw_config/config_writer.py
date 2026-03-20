@@ -117,3 +117,14 @@ class OpenClawConfigWriter(LoggerClass):
         return httpx.delete(
             f"{self._gateway_base_url}/api/channels/telegram/groups/{group_id}"
         )
+
+    def read_config(self) -> dict:
+        """
+        Read and return the full openclaw.json config.
+
+        Returns:
+            dict: Parsed openclaw.json content.
+        """
+        # 1. Read and return the config under the file lock
+        with self._lock:
+            return self._read()
