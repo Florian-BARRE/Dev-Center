@@ -15,6 +15,7 @@
 ###############################################################################
 FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim AS py-build
 
+# /workspace is the build scratch area — isolated from the runtime filesystem.
 WORKDIR /workspace
 
 # Tell uv where to create the project virtual environment.
@@ -79,12 +80,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     && curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
     && apt-get install -y --no-install-recommends nodejs \
+    && apt-get remove -y curl \
+    && apt-get autoremove -y \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Install the Claude Code CLI globally.
 # Required by the bridge manager to spawn `claude remote-control` processes.
 RUN npm install -g @anthropic-ai/claude-code
 
+# /app is the runtime working directory — source code is mounted here.
 WORKDIR /app
 
 # Copy prebuilt Python virtual environment from the py-build stage.
@@ -101,6 +105,7 @@ COPY --from=ui-build /workspace/idh-app/frontend/dist /app/idh-app/frontend/dist
 COPY idh-app/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
+# Expose port 8000 — the port uvicorn listens on for FastAPI requests.
 EXPOSE 8000
 
 # Start via entrypoint.sh which handles SSH permissions and DEV_MODE detection.
