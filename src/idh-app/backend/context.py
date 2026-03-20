@@ -20,5 +20,8 @@ class CONTEXT:
     Never instantiate this class — access attributes at class level.
     """
 
+    def __new__(cls) -> None:
+        raise TypeError("CONTEXT is a static-only class and cannot be instantiated.")
+
     logger: LoggerPlusPlus
     RUNTIME_CONFIG: Type[RUNTIME_CONFIG]

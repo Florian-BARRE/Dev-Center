@@ -44,11 +44,11 @@ class RUNTIME_CONFIG(EnvConfigLoader):
     sys.path.append(str(PATH_LIBS))
 
     # ───── Logging (mandatory in every project) ─────
-    LOGGING_CONSOLE_LEVEL = env("LOGGING_CONSOLE_LEVEL", default="INFO")
-    LOGGING_FILE_LEVEL = env("LOGGING_FILE_LEVEL", default="DEBUG")
-    LOGGING_ENABLE_CONSOLE = env("LOGGING_ENABLE_CONSOLE", cast=bool, default=True)
-    LOGGING_ENABLE_FILE = env("LOGGING_ENABLE_FILE", cast=bool, default=False)
-    LOGGING_LPP_FORMAT = env("LOGGING_LPP_FORMAT", default="ShortFormat")
+    LOGGING_CONSOLE_LEVEL = env("LOGGING_CONSOLE_LEVEL")
+    LOGGING_FILE_LEVEL = env("LOGGING_FILE_LEVEL")
+    LOGGING_ENABLE_CONSOLE = env("LOGGING_ENABLE_CONSOLE", cast=bool)
+    LOGGING_ENABLE_FILE = env("LOGGING_ENABLE_FILE", cast=bool)
+    LOGGING_LPP_FORMAT = env("LOGGING_LPP_FORMAT")
 
     # ───── FastAPI ─────
     FASTAPI_APP_NAME = env("FASTAPI_APP_NAME", default="IDH App")

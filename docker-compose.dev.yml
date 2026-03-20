@@ -2,8 +2,9 @@
 # Usage: docker compose -f docker-compose.yml -f docker-compose.dev.yml up
 #
 # Docker Compose MERGES service definitions from both files.
-# The base docker-compose.yml env_file, ports, networks, and depends_on are
-# preserved automatically — only the fields declared below are overridden.
+# The base docker-compose.yml env_file, ports, networks, depends_on, and volumes
+# are preserved automatically. List fields (volumes, environment) are APPENDED,
+# not replaced — so production volumes remain alongside any dev-only additions.
 
 services:
   idh-app:
