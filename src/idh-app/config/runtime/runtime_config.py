@@ -26,7 +26,17 @@ if os.environ.get("DEV_MODE"):
 
 
 class RUNTIME_CONFIG(EnvConfigLoader):
-    """Runtime configuration loaded from environment variables."""
+    """
+    Application runtime configuration loaded from environment variables.
+
+    Evaluated at import time — all env() calls execute immediately when this
+    module is imported. Must be the first import in every entry point because
+    the class body calls sys.path.append() to register the libs/ directory.
+
+    Raises:
+        RuntimeError: If a required env var (e.g. IDH_WEBHOOK_SECRET) is absent
+            and has no default value.
+    """
 
     # ───── Paths ─────
     PATH_ROOT_DIR = pathlib.Path(__file__).resolve().parent.parent.parent
@@ -64,7 +74,7 @@ class RUNTIME_CONFIG(EnvConfigLoader):
 
 # ─── Apply logging configuration AFTER class definition ───
 lpp_format = getattr(
-    lpp_formats, RUNTIME_CONFIG.LOGGING_LPP_FORMAT, lpp_formats.ShortFormat
+    lpp_formats, RUNTIME_CONFIG.LOGGING_LPP_FORMAT, lpp_formats.DebugFormat
 )()
 
 if RUNTIME_CONFIG.LOGGING_ENABLE_CONSOLE:

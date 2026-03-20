@@ -10,7 +10,6 @@ build/
 
 # Node
 node_modules/
-dist/
 
 # Logs
 logs/
