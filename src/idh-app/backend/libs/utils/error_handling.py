@@ -5,6 +5,7 @@
 import functools
 import inspect
 import traceback
+from typing import Callable
 
 # ====== Third-Party Library Imports ======
 from fastapi import HTTPException
@@ -32,7 +33,7 @@ def _build_error_detail(func_name: str, exc: Exception, tb: str) -> dict:
     return {"error": "Internal server error."}
 
 
-def auto_handle_errors(func):
+def auto_handle_errors(func: Callable) -> Callable:
     """
     Decorator to automatically handle unexpected exceptions for sync and async routes.
 
@@ -46,7 +47,7 @@ def auto_handle_errors(func):
     """
 
     @functools.wraps(func)
-    async def async_wrapper(*args, **kwargs):
+    async def async_wrapper(*args: object, **kwargs: object) -> object:
         try:
             return await func(*args, **kwargs)
         except HTTPException:
@@ -60,7 +61,7 @@ def auto_handle_errors(func):
             )
 
     @functools.wraps(func)
-    def sync_wrapper(*args, **kwargs):
+    def sync_wrapper(*args: object, **kwargs: object) -> object:
         try:
             return func(*args, **kwargs)
         except HTTPException:

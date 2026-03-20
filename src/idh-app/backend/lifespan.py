@@ -25,11 +25,26 @@ def lifespan() -> Any:
     """
 
     def log_step(step: int, message: str) -> None:
-        """Log a numbered startup step."""
+        """
+        Log a numbered startup step.
+
+        Args:
+            step (int): Current step number (1-based).
+            message (str): Description of the step being initialized.
+        """
         CONTEXT.logger.info(f"\n[{step}/{TOTAL_STEPS}] {message}...")
 
     @asynccontextmanager
     async def _lifespan(app: Any) -> AsyncIterator[None]:
+        """
+        Async context manager that runs startup and shutdown logic.
+
+        Args:
+            app (Any): The FastAPI application instance (unused directly).
+
+        Yields:
+            None: Control is yielded to FastAPI while the app is running.
+        """
         _ = app
         try:
             # 1. Print startup banner
