@@ -1,0 +1,94 @@
+# IA-Dev-Hub — Production Docker Compose
+# Prerequisites: run ./setup.sh once to create ~/iah/ and ~/iah/.env
+# Start: docker compose up -d
+# Stop:  docker compose down
+
+services:
+  openclaw-gateway:
+    # OpenClaw AI agent runtime — Telegram bot, session management, IDH plugin host
+    image: ghcr.io/openclaw/openclaw:latest
+    restart: unless-stopped
+    ports:
+      # Gateway API port — Telegram polling + inter-service calls from idh-app
+      - "${OPENCLAW_GATEWAY_PORT:-18789}:18789"
+      # Dashboard port — OpenClaw web UI (reverse-proxied by Zoraxy)
+      - "${OPENCLAW_DASHBOARD_PORT:-18790}:18790"
+    env_file:
+      # Secrets loaded from host data directory (not committed to repo)
+      - ~/iah/.env
+    volumes:
+      # OpenClaw configuration, agents, and session data
+      - ~/iah/config:/home/node/.openclaw
+      # Shared project workspaces (repos cloned by idh-app, read by OpenClaw tools)
+      - ~/iah/workspaces:/workspaces
+      # Claude Code OAuth credentials — read-only, auth done on host
+      - ~/.claude:/home/node/.claude:ro
+      # Codex OAuth credentials — read-only
+      - ~/.codex:/home/node/.codex:ro
+      # IDH plugin source at ./plugin/idh/ → mounted as the plugin directory.
+      # NOTE: spec shows ./plugin but ./plugin/idh/ is correct — idh/ is the plugin root.
+      - ./plugin/idh:/home/node/.openclaw/plugins/idh:ro
+    networks:
+      - idh-net
+    environment:
+      # Bind to LAN so idh-app on idh-net can reach the webhook endpoint
+      - OPENCLAW_GATEWAY_BIND=lan
+
+  idh-app:
+    # IDH sidecar: FastAPI API + React dashboard + bridge manager + watchdog
+    build:
+      # Build context is the src/ directory (Dockerfile COPY uses relative paths from src/)
+      context: src
+      dockerfile: idh-app/Dockerfile
+    image: idh-app:latest
+    restart: unless-stopped
+    ports:
+      # FastAPI + React dashboard (reverse-proxied by Zoraxy)
+      - "${IDH_APP_PORT:-8000}:8000"
+    env_file:
+      - ~/iah/.env
+    volumes:
+      # Shared project workspaces — same bind as openclaw-gateway and code-server
+      - ~/iah/workspaces:/workspaces
+      # IDH state file — idh-app is sole writer (spec Section 1.7)
+      - ~/iah/state:/data
+      # Coding rules and context templates — read-only
+      - ~/iah/rules:/rules:ro
+      # OpenClaw config dir — idh-app is sole writer of openclaw.json
+      - ~/iah/config:/openclaw-config
+      # Claude Code OAuth for remote-control bridge
+      - ~/.claude:/home/app/.claude:ro
+      # Codex OAuth for Codex API auto-summary calls
+      - ~/.codex:/home/app/.codex:ro
+      # SSH key for git clone/fetch via SSH
+      - ~/.ssh:/home/app/.ssh:ro
+    networks:
+      - idh-net
+    depends_on:
+      - openclaw-gateway
+    environment:
+      # Mount paths passed to RUNTIME_CONFIG via env vars
+      - DATA_DIR=/data
+      - WORKSPACES_DIR=/workspaces
+      - RULES_DIR=/rules
+      - OPENCLAW_CONFIG_DIR=/openclaw-config
+
+  code-server:
+    # VS Code in the browser — file browsing and exploration of project workspaces
+    image: codercom/code-server:latest
+    restart: unless-stopped
+    ports:
+      # VS Code web UI (reverse-proxied by Zoraxy)
+      - "${CODE_SERVER_PORT:-8443}:8080"
+    volumes:
+      # Same workspace volume as openclaw-gateway and idh-app
+      - ~/iah/workspaces:/workspaces
+    networks:
+      - idh-net
+    # Disable code-server auth — Zoraxy handles access control
+    command: --auth none /workspaces
+
+networks:
+  idh-net:
+    # Shared bridge network — all services can reach each other by service name
+    driver: bridge

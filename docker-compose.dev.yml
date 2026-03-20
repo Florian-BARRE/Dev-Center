@@ -1,0 +1,18 @@
+# Development overrides for IA-Dev-Hub.
+# Usage: docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+#
+# Docker Compose MERGES service definitions from both files.
+# The base docker-compose.yml env_file, ports, networks, and depends_on are
+# preserved automatically — only the fields declared below are overridden.
+
+services:
+  idh-app:
+    # Override: mount source code so edits are reflected without rebuilding.
+    # The Dockerfile image is still used for the Python venv and Node CLI tools.
+    volumes:
+      - ./src/idh-app:/app/idh-app
+    environment:
+      # Enable uvicorn --reload (checked in entrypoint.sh via DEV_MODE)
+      - DEV_MODE=true
+      - FASTAPI_DEBUG_MODE=true
+      - LOGGING_CONSOLE_LEVEL=DEBUG
