@@ -3,7 +3,6 @@
 
 # ====== Standard Library Imports ======
 import json
-import pathlib
 
 # ====== Third-Party Library Imports ======
 import pytest
