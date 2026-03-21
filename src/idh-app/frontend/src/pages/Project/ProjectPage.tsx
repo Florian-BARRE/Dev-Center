@@ -73,7 +73,7 @@ export default function ProjectPage() {
             {/* Tab content */}
             <div style={{ background: theme.colors.surface, border: `1px solid ${theme.colors.border}`, borderRadius: theme.radius.lg, padding: theme.spacing.lg }}>
               {tab === 'overview'  && <OverviewTab  project={project} />}
-              {tab === 'bridge'    && <BridgeTab    project={project} />}
+              {tab === 'bridge'    && <BridgeTab    project={project} onProjectChange={setProject} />}
               {tab === 'memory'    && <MemoryTab    project={project} />}
               {tab === 'settings'  && <SettingsTab  project={project} />}
             </div>
