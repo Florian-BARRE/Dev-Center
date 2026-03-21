@@ -5,6 +5,7 @@
 import hashlib
 import hmac
 import json
+import pathlib
 
 # ====== Third-Party Library Imports ======
 from fastapi import APIRouter, Header, HTTPException, Request
@@ -13,7 +14,7 @@ from fastapi import APIRouter, Header, HTTPException, Request
 from backend.context import CONTEXT
 from backend.libs.utils.error_handling import auto_handle_errors
 from libs.state.models import ModelOverride, Project
-from .models import ModelUpdateRequest, SettingsResponse, TelegramPromptRequest, WebhookPayload
+from .models import FileContentResponse, FileWriteRequest, ModelUpdateRequest, SettingsResponse, TelegramPromptRequest, WebhookPayload
 
 router = APIRouter(tags=["settings"])
 
@@ -146,4 +147,84 @@ async def put_model(group_id: str, body: ModelUpdateRequest) -> SettingsResponse
         ModelOverride(provider=body.provider, model=body.model),
     )
 
+    return SettingsResponse(status="ok")
+
+
+@router.get("/settings/global/coding-rules", response_model=FileContentResponse)
+@auto_handle_errors
+async def get_global_coding_rules() -> FileContentResponse:
+    """
+    Read CODING_RULES.md content.
+
+    Returns:
+        FileContentResponse: Content of CODING_RULES.md.
+
+    Raises:
+        HTTPException: 404 if the file does not exist.
+    """
+    # 1. Resolve path and check existence
+    path: pathlib.Path = CONTEXT.RUNTIME_CONFIG.PATH_RULES_DIR / "CODING_RULES.md"
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="CODING_RULES.md not found")
+
+    # 2. Read and return content
+    return FileContentResponse(content=path.read_text())
+
+
+@router.put("/settings/global/coding-rules", response_model=SettingsResponse)
+@auto_handle_errors
+async def put_global_coding_rules(body: FileWriteRequest) -> SettingsResponse:
+    """
+    Write CODING_RULES.md content.
+
+    Args:
+        body (FileWriteRequest): New content to write.
+
+    Returns:
+        SettingsResponse: Success status.
+    """
+    # 1. Ensure directory exists and write file
+    path: pathlib.Path = CONTEXT.RUNTIME_CONFIG.PATH_RULES_DIR / "CODING_RULES.md"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(body.content)
+    return SettingsResponse(status="ok")
+
+
+@router.get("/settings/global/common-context", response_model=FileContentResponse)
+@auto_handle_errors
+async def get_global_common_context() -> FileContentResponse:
+    """
+    Read COMMON_CONTEXT.md content.
+
+    Returns:
+        FileContentResponse: Content of COMMON_CONTEXT.md.
+
+    Raises:
+        HTTPException: 404 if the file does not exist.
+    """
+    # 1. Resolve path and check existence
+    path: pathlib.Path = CONTEXT.RUNTIME_CONFIG.PATH_RULES_DIR / "COMMON_CONTEXT.md"
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="COMMON_CONTEXT.md not found")
+
+    # 2. Read and return content
+    return FileContentResponse(content=path.read_text())
+
+
+@router.put("/settings/global/common-context", response_model=SettingsResponse)
+@auto_handle_errors
+async def put_global_common_context(body: FileWriteRequest) -> SettingsResponse:
+    """
+    Write COMMON_CONTEXT.md content.
+
+    Args:
+        body (FileWriteRequest): New content to write.
+
+    Returns:
+        SettingsResponse: Success status.
+    """
+    # 1. Ensure directory exists and write file
+    path: pathlib.Path = CONTEXT.RUNTIME_CONFIG.PATH_RULES_DIR / "COMMON_CONTEXT.md"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(body.content)
     return SettingsResponse(status="ok")

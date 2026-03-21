@@ -58,3 +58,25 @@ class SettingsResponse(BaseModel):
     """
 
     status: str
+
+
+class FileContentResponse(_CamelModel):
+    """
+    Response model for file content read operations.
+
+    Attributes:
+        content (str): File content as a string.
+    """
+
+    content: str
+
+
+class FileWriteRequest(_CamelModel):
+    """
+    Request body for file write operations.
+
+    Attributes:
+        content (str): New file content.
+    """
+
+    content: str = Field(..., description="New file content.")
