@@ -11,7 +11,11 @@ export default defineConfig({
   },
   server: {
     proxy: {
-      "/api": "http://localhost:8000",
+      "/api": {
+        target: "http://localhost:8000",
+        changeOrigin: true,
+        ws: true, // Enable WebSocket proxying for /api/v1/bridge/{group_id}/logs
+      },
     },
   },
   build: {
