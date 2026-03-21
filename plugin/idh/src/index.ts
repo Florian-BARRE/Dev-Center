@@ -2,7 +2,12 @@
 // IDH Projects OpenClaw plugin — entry point.
 // Wires all commands, hooks, and the inbound webhook route.
 
-import type { OpenClawPluginDefinition } from "openclaw/plugin-sdk";
+// NOTE: The OpenClaw SDK type definitions do not model the full runtime API surface:
+// command contexts lack groupId, hook event shapes differ, and sendMessage/registerHttpRoute
+// use types that do not match the actual runtime signatures. Explicit `any` is used for `api`
+// to reflect this type gap — the runtime contract is correct; the types are incomplete.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type AnyApi = any;
 
 import { menuHandler }        from "./commands/menu";
 import { infoHandler }        from "./commands/info";
@@ -23,11 +28,11 @@ import type { WebhookEvent }   from "./types/idh";
 
 const WEBHOOK_SECRET = process.env.IDH_WEBHOOK_SECRET ?? "";
 
-const plugin: OpenClawPluginDefinition = {
+const plugin = {
   id: "idh-projects",
   name: "IDH Projects",
 
-  register(api) {
+  register(api: AnyApi) {
     // ── Commands ──────────────────────────────────────────────────────────
 
     api.registerCommand({

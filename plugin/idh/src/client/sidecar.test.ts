@@ -20,7 +20,7 @@ describe("SidecarClient", () => {
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({ projects: [mockProject] }),
-    } as Response);
+    } as Response) as unknown as typeof fetch;
 
     const result = await client.getProjects();
     expect(result).toHaveLength(1);
@@ -35,7 +35,7 @@ describe("SidecarClient", () => {
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({ status: "started" }),
-    } as Response);
+    } as Response) as unknown as typeof fetch;
 
     await client.startBridge("-100111");
     expect(fetch).toHaveBeenCalledWith(
@@ -48,7 +48,7 @@ describe("SidecarClient", () => {
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({ status: "stopped" }),
-    } as Response);
+    } as Response) as unknown as typeof fetch;
 
     await client.stopBridge("-100111");
     expect(fetch).toHaveBeenCalledWith(
@@ -62,7 +62,7 @@ describe("SidecarClient", () => {
       ok: false,
       status: 404,
       text: async () => "not found",
-    } as Response);
+    } as Response) as unknown as typeof fetch;
 
     await expect(client.getProject("-100999")).rejects.toThrow("404");
   });
