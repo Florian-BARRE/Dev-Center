@@ -40,7 +40,7 @@ export function getTelegramPrompt(groupId: string): Promise<TelegramPromptRespon
   return apiFetch(`/api/v1/settings/${groupId}/telegram-prompt`, { method: 'GET' });
 }
 
-export function putTelegramPrompt(groupId: string, agentId: string, systemPrompt: string): Promise<FileWriteResponse> {
+export function putTelegramPrompt(_groupId: string, agentId: string, systemPrompt: string): Promise<FileWriteResponse> {
   return apiFetch(`/api/v1/settings/telegram/prompt/${agentId}`, {
     method: 'PUT',
     body: JSON.stringify({ systemPrompt }),

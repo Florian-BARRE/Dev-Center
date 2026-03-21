@@ -14,8 +14,13 @@ export async function apiFetch<T>(
     ...options,
   });
   if (!res.ok) {
-    const text = await res.text().catch(() => res.statusText);
-    throw new ApiError(res.status, text);
+    let errorDetail = res.statusText;
+    try {
+      errorDetail = await res.text();
+    } catch (_e) {
+      // Fall back to statusText if body can't be read
+    }
+    throw new ApiError(res.status, errorDetail);
   }
   return res.json() as Promise<T>;
 }

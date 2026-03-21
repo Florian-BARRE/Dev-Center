@@ -19,7 +19,8 @@ export function renewBridge(groupId: string): Promise<BridgeActionResponse> {
 
 /** Opens a WebSocket to stream bridge logs. Returns the WebSocket instance. */
 export function openBridgeLogs(groupId: string, onLine: (line: string) => void): WebSocket {
-  const ws = new WebSocket(`/api/v1/bridge/${groupId}/logs`);
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const ws = new WebSocket(`${protocol}//${window.location.host}/api/v1/bridge/${groupId}/logs`);
   ws.onmessage = (e) => onLine(e.data as string);
   return ws;
 }

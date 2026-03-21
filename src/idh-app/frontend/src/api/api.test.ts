@@ -14,7 +14,9 @@ function makeResponse(body: unknown, status = 200) {
   return Promise.resolve({
     ok: status < 400,
     status,
+    statusText: status < 400 ? 'OK' : 'Error',
     json: () => Promise.resolve(body),
+    text: () => Promise.resolve(JSON.stringify(body)),
   });
 }
 
@@ -95,5 +97,31 @@ describe('memory API', () => {
       '/api/v1/memory/p1/session-memory',
       expect.objectContaining({ method: 'PUT' })
     );
+  });
+});
+
+describe('apiFetch error handling', () => {
+  it('throws ApiError on non-2xx', async () => {
+    mockFetch.mockReturnValue(makeResponse({ error: 'not found' }, 404));
+    const { apiFetch } = await import('./client');
+    await expect(apiFetch('/api/v1/projects')).rejects.toMatchObject({ status: 404 });
+  });
+});
+
+describe('bridge API (extended)', () => {
+  it('renewBridge POSTs to /renew', async () => {
+    const { renewBridge } = await import('./bridge');
+    mockFetch.mockReturnValue(makeResponse({ status: 'renewed' }));
+    await renewBridge('g1');
+    expect(mockFetch).toHaveBeenCalledWith('/api/v1/bridge/g1/renew', expect.objectContaining({ method: 'POST' }));
+  });
+});
+
+describe('settings API (extended)', () => {
+  it('getModel GETs the right path', async () => {
+    const { getModel } = await import('./settings');
+    mockFetch.mockReturnValue(makeResponse({ provider: 'anthropic', model: 'claude-sonnet-4-6' }));
+    await getModel('g1');
+    expect(mockFetch).toHaveBeenCalledWith('/api/v1/settings/g1/model', expect.any(Object));
   });
 });
