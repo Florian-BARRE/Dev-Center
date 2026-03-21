@@ -3,12 +3,14 @@
 #
 # What it does:
 #   1. Checks that all services/*.env files are filled in.
-#   2. Auto-generates IDH_WEBHOOK_SECRET if blank.
-#   3. Creates the runtime data directory tree (IDH_DATA_ROOT).
-#   4. Checks host auth credentials (~/.claude, ~/.codex, SSH key).
-#   5. Seeds openclaw.json and rule templates if not present.
-#   6. Builds and starts Docker Compose.
-#   7. Waits for idh-app to become healthy, then installs the IDH plugin.
+#   2. Loads config and validates required variables.
+#   3. Validates IDH_DATA_ROOT path (Windows apostrophe check) + creates
+#      data directories IMMEDIATELY — before Docker ever sees the path.
+#   4. Auto-generates IDH_WEBHOOK_SECRET if blank.
+#   5. Checks host auth credentials (~/.claude, ~/.codex, SSH key).
+#   6. Seeds openclaw.json and rule templates if not present.
+#   7. Builds and starts Docker Compose.
+#   8. Waits for idh-app to become healthy, then installs the IDH plugin.
 #
 # Run once:          ./setup.sh
 # Subsequent starts: docker compose --env-file services/common/.env up -d
@@ -64,7 +66,40 @@ source services/idh-plugin/.env
 log "IDH_DATA_ROOT = ${IDH_DATA_ROOT}"
 
 # ─────────────────────────────────────────────────────────────
-# Step 3 — Auto-generate IDH_WEBHOOK_SECRET if blank
+# Step 3 — Validate IDH_DATA_ROOT + create data directories
+#
+# Directories are created HERE, before docker compose runs.
+# Docker Desktop on Windows calls CreateFile on the host path
+# when it tries to auto-create a missing bind-mount target.
+# That call fails if the path is absent AND the parent directory
+# contains an apostrophe (e.g. "Florian's Laptop").
+# Pre-creating with mkdir avoids the CreateFile call entirely.
+# ─────────────────────────────────────────────────────────────
+
+# On Windows (Git Bash / MSYS), resolve the absolute path and check
+# for apostrophes — Docker Desktop cannot mount such paths.
+if [[ "$OSTYPE" == "msys"* ]] || [[ "$OSTYPE" == "mingw"* ]] || [[ "$OSTYPE" == "cygwin"* ]]; then
+    ABS_DATA_ROOT=$(realpath -m "${IDH_DATA_ROOT}" 2>/dev/null || echo "${PWD}/${IDH_DATA_ROOT#./}")
+    if [[ "$ABS_DATA_ROOT" == *"'"* ]]; then
+        echo ""
+        err "Docker Desktop on Windows cannot mount paths that contain an apostrophe.
+     Resolved path : ${ABS_DATA_ROOT}
+     Fix           : set IDH_DATA_ROOT to an absolute path with no spaces or apostrophes.
+     Example       : IDH_DATA_ROOT=C:/dev-data/idh
+     Edit services/common/.env, then re-run ./setup.sh."
+    fi
+fi
+
+log "Creating data directories at ${IDH_DATA_ROOT} ..."
+mkdir -p \
+    "${IDH_DATA_ROOT}/config" \
+    "${IDH_DATA_ROOT}/workspaces" \
+    "${IDH_DATA_ROOT}/state" \
+    "${IDH_DATA_ROOT}/rules"
+log "  [OK] Data directories ready."
+
+# ─────────────────────────────────────────────────────────────
+# Step 4 — Auto-generate IDH_WEBHOOK_SECRET if blank
 # ─────────────────────────────────────────────────────────────
 if [ -z "${IDH_WEBHOOK_SECRET:-}" ]; then
     log "Generating IDH_WEBHOOK_SECRET ..."
@@ -77,12 +112,6 @@ if [ -z "${IDH_WEBHOOK_SECRET:-}" ]; then
 
     log "IDH_WEBHOOK_SECRET written to services/idh-plugin/.env"
 fi
-
-# ─────────────────────────────────────────────────────────────
-# Step 4 — Create runtime data directory tree
-# ─────────────────────────────────────────────────────────────
-log "Creating data directories at ${IDH_DATA_ROOT} ..."
-mkdir -p "${IDH_DATA_ROOT}"/{config,workspaces,state,rules}
 
 # ─────────────────────────────────────────────────────────────
 # Step 5 — Check host auth credentials
@@ -150,7 +179,7 @@ else
 fi
 
 # ─────────────────────────────────────────────────────────────
-# Step 7 — Seed rule templates if not present
+# Step 6b — Seed rule templates if not present
 # ─────────────────────────────────────────────────────────────
 CODING_RULES="${IDH_DATA_ROOT}/rules/CODING_RULES.md"
 COMMON_CONTEXT="${IDH_DATA_ROOT}/rules/COMMON_CONTEXT.md"
@@ -188,13 +217,24 @@ EOF
 fi
 
 # ─────────────────────────────────────────────────────────────
-# Step 8 — Build and start Docker Compose
+# Step 7 — Pre-flight + Build and start Docker Compose
 # ─────────────────────────────────────────────────────────────
+
+# Final safety check: ensure all bind-mount targets exist before
+# docker compose runs. Protects against partial failures above.
+for dir in config workspaces state rules; do
+    target="${IDH_DATA_ROOT}/${dir}"
+    if [ ! -d "$target" ]; then
+        log "  Re-creating missing directory: ${target}"
+        mkdir -p "$target"
+    fi
+done
+
 log "Building and starting Docker Compose ..."
 docker compose --env-file services/common/.env up -d --build
 
 # ─────────────────────────────────────────────────────────────
-# Step 9 — Wait for idh-app to become healthy
+# Step 8 — Wait for idh-app to become healthy
 # ─────────────────────────────────────────────────────────────
 log "Waiting for idh-app to become healthy ..."
 IDH_APP_PORT="${IDH_APP_PORT:-8000}"
@@ -210,7 +250,7 @@ done
 [ "$HEALTHY" = true ] || err "idh-app did not become healthy after 90s — check: docker compose logs idh-app"
 
 # ─────────────────────────────────────────────────────────────
-# Step 10 — Install IDH plugin in openclaw-gateway
+# Step 9 — Install IDH plugin in openclaw-gateway
 # ─────────────────────────────────────────────────────────────
 log "Installing IDH plugin in openclaw-gateway ..."
 docker exec openclaw-gateway openclaw extensions install \
