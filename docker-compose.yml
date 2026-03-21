@@ -27,6 +27,8 @@ services:
     env_file:
       # OpenClaw-specific secrets (Telegram token, user ID)
       - services/openclaw/.env
+      # IDH plugin secrets — shares IDH_WEBHOOK_SECRET with the plugin
+      - services/idh-plugin/.env
     volumes:
       # OpenClaw configuration, agents, and session data
       - ${IDH_DATA_ROOT}/config:/home/node/.openclaw
@@ -43,6 +45,9 @@ services:
     environment:
       # Bind to LAN so idh-app on idh-net can reach the webhook endpoint
       - OPENCLAW_GATEWAY_BIND=lan
+      # URL idh-app is reachable at from within the idh-net Docker network.
+      # Plugin reads this to construct all HTTP calls to the sidecar.
+      - IDH_APP_URL=http://idh-app:8000
 
   idh-app:
     # IDH sidecar: FastAPI API + React dashboard + bridge manager + watchdog

@@ -33,6 +33,14 @@ def create_test_dirs() -> None:
     for d in dirs:
         d.mkdir(parents=True, exist_ok=True)
 
+    # 1b. Clean up any persisted state file from previous runs
+    state_file = pathlib.Path("/tmp/idh-test-data/idh-projects.state.json")
+    if state_file.exists():
+        state_file.unlink()
+    state_lock = pathlib.Path("/tmp/idh-test-data/idh-projects.state.json.lock")
+    if state_lock.exists():
+        state_lock.unlink()
+
     # 2. Seed openclaw.json with empty-but-valid structure
     openclaw_path = pathlib.Path("/tmp/idh-test-openclaw/openclaw.json")
     if not openclaw_path.exists():

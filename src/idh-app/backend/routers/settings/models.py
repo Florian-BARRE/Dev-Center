@@ -4,6 +4,9 @@
 # ====== Third-Party Library Imports ======
 from pydantic import BaseModel, Field
 
+# ====== Internal Project Imports ======
+from libs.state.models import _CamelModel
+
 
 class WebhookPayload(BaseModel):
     """
@@ -31,6 +34,19 @@ class TelegramPromptRequest(BaseModel):
     """
 
     system_prompt: str = Field(..., description="New system prompt for the agent.")
+
+
+class ModelUpdateRequest(_CamelModel):
+    """
+    Request body for updating a project's model override.
+
+    Attributes:
+        provider (str): AI provider slug (e.g. "anthropic").
+        model (str): Model identifier (e.g. "claude-sonnet-4-6").
+    """
+
+    provider: str = Field(..., description="AI provider slug.")
+    model: str = Field(..., description="Model identifier.")
 
 
 class SettingsResponse(BaseModel):

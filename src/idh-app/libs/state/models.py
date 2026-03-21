@@ -39,6 +39,19 @@ class BridgeState(_CamelModel):
     expires_at: str
 
 
+class ModelOverride(_CamelModel):
+    """
+    Provider + model selection override for a project's coding agent.
+
+    Attributes:
+        provider (str): AI provider slug (e.g. "anthropic").
+        model (str): Model identifier (e.g. "claude-opus-4-6").
+    """
+
+    provider: str
+    model: str
+
+
 class Project(_CamelModel):
     """
     Persistent state for a registered IDH project.
@@ -48,12 +61,14 @@ class Project(_CamelModel):
         project_id (str): Unique project slug / identifier.
         repo_url (str): Git repository URL.
         bridge (BridgeState | None): Active bridge state, or None if idle.
+        model_override (ModelOverride | None): Optional provider/model override for the coding agent.
     """
 
     group_id: str
     project_id: str
     repo_url: str
     bridge: BridgeState | None = None
+    model_override: ModelOverride | None = None
 
 
 class StateFile(_CamelModel):

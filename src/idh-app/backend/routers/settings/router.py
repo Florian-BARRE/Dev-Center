@@ -12,8 +12,8 @@ from fastapi import APIRouter, Header, HTTPException, Request
 # ====== Internal Project Imports ======
 from backend.context import CONTEXT
 from backend.libs.utils.error_handling import auto_handle_errors
-from libs.state.models import Project
-from .models import SettingsResponse, TelegramPromptRequest, WebhookPayload
+from libs.state.models import ModelOverride, Project
+from .models import ModelUpdateRequest, SettingsResponse, TelegramPromptRequest, WebhookPayload
 
 router = APIRouter(tags=["settings"])
 
@@ -121,4 +121,29 @@ async def put_telegram_prompt(
     """
     # 1. Delegate to the OpenClaw config writer
     CONTEXT.openclaw_writer.update_agent_system_prompt(agent_id, body.system_prompt)
+    return SettingsResponse(status="ok")
+
+
+@router.put("/settings/{group_id}/model", response_model=SettingsResponse)
+@auto_handle_errors
+async def put_model(group_id: str, body: ModelUpdateRequest) -> SettingsResponse:
+    """
+    Update the model override for a project (called from /agent wizard).
+
+    Args:
+        group_id (str): Telegram group ID.
+        body (ModelUpdateRequest): New provider and model.
+
+    Returns:
+        SettingsResponse: Success status.
+
+    Raises:
+        HTTPException: 404 if the project does not exist.
+    """
+    # 1. Atomically read-modify-write the model override (raises 404 if missing)
+    CONTEXT.state_manager.set_model_override(
+        group_id,
+        ModelOverride(provider=body.provider, model=body.model),
+    )
+
     return SettingsResponse(status="ok")
