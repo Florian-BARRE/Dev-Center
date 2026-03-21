@@ -2,7 +2,7 @@
 #
 # First-time setup:
 #   1. Copy services/*/.env.example → services/*/.env and fill in values.
-#   2. Run ./setup.sh  (creates data dirs, seeds config, builds and starts everything)
+#   2. Run ./start.sh  (creates data dirs, seeds config, builds and starts everything)
 #
 # Subsequent starts:
 #   docker compose --env-file services/common/.env up -d
