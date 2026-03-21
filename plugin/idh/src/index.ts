@@ -65,6 +65,9 @@ const plugin: OpenClawPluginDefinition = {
       wizardEngine,
       (gId, url, prov, model) => sidecar.createProject(gId, url, prov, model),
       async (gId, text) => {
+        // NOTE: The OpenClaw SDK api parameter does not expose sendMessage in its
+        // TypeScript type definition, but the runtime object includes it.
+        // Cast to `never` to access the method until the SDK type is updated.
         await (api as never as { sendMessage(groupId: string, text: string): Promise<void> })
           .sendMessage(gId, text);
       },
@@ -85,6 +88,9 @@ const plugin: OpenClawPluginDefinition = {
 
     const onEvent = async (event: WebhookEvent): Promise<void> => {
       const { type, groupId, minutesRemaining, bridgeUrl } = event;
+      // NOTE: The OpenClaw SDK api parameter does not expose sendMessage in its
+      // TypeScript type definition, but the runtime object includes it.
+      // Cast to `never` to access the method until the SDK type is updated.
       const sendMsg = (api as never as { sendMessage(g: string, t: string): Promise<void> }).sendMessage.bind(api);
 
       if (type === "bridge_warning") {

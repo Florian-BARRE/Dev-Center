@@ -2,12 +2,7 @@
 // /agent — inline model switch wizard. Updates modelOverride in state.
 
 import { sidecar } from "../client/sidecar";
-
-const MODELS = [
-  { provider: "anthropic", model: "claude-opus-4-6",   label: "Claude Opus 4.6" },
-  { provider: "anthropic", model: "claude-sonnet-4-6", label: "Claude Sonnet 4.6" },
-  { provider: "anthropic", model: "claude-haiku-4-5",  label: "Claude Haiku 4.5" },
-];
+import { MODELS } from "../constants/models";
 
 /**
  * Handle the /agent command — show current model and allow switching.
