@@ -23,12 +23,13 @@ export default function ProjectPage() {
   const [project, setProject] = useState<Project | null>(null);
   const [tab, setTab] = useState<Tab>('overview');
   const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!decodedGroupId) return;
     getProject(decodedGroupId)
-      .then(setProject)
-      .catch((e: Error) => setError(e.message));
+      .then((p) => { setProject(p); setLoading(false); })
+      .catch((e: Error) => { setError(e.message); setLoading(false); });
   }, [decodedGroupId]);
 
   const tabButtonStyle = (id: Tab) => ({
@@ -50,7 +51,7 @@ export default function ProjectPage() {
         </Link>
 
         {error && <div style={{ color: theme.colors.danger, marginTop: theme.spacing.md }}>{error}</div>}
-        {!project && !error && <div style={{ color: theme.colors.muted, marginTop: theme.spacing.md }}>Loading...</div>}
+        {loading && <div style={{ color: theme.colors.muted, marginTop: theme.spacing.md }}>Loading...</div>}
 
         {project && (
           <>

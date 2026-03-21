@@ -15,22 +15,26 @@ export default function SettingsTab({ project }: SettingsTabProps) {
   const [model, setModel] = useState(project.modelOverride?.model ?? MODEL_OPTIONS[0].model);
   const [telegramPrompt, setTelegramPrompt] = useState('');
   const [claudeMd, setClaudeMd] = useState('');
-  const [agentId, setAgentId] = useState('');
   const [saving, setSaving] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    let cancelled = false;
     Promise.all([
       getModel(project.groupId),
       getTelegramPrompt(project.groupId),
       getClaudeMd(project.groupId),
     ]).then(([m, t, c]) => {
+      if (cancelled) return;
       if (m.provider) { setProvider(m.provider); setModel(m.model); }
       setTelegramPrompt(t.systemPrompt);
-      setAgentId(t.agentId);
       setClaudeMd(c.content);
-    }).catch((e: Error) => setError(e.message));
-  }, [project.groupId]);
+    }).catch((e: Error) => {
+      if (cancelled) return;
+      setError(e.message);
+    });
+    return () => { cancelled = true; };
+  }, [project.groupId, project.projectId]);
 
   const save = async (what: string, fn: () => Promise<unknown>) => {
     setSaving(what);
@@ -71,7 +75,7 @@ export default function SettingsTab({ project }: SettingsTabProps) {
       <section>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: theme.spacing.sm }}>
           <h3 style={{ margin: 0, fontFamily: theme.font.mono, fontSize: theme.font.size.md }}>Telegram Agent Prompt</h3>
-          {saveButton('prompt', () => save('prompt', () => putTelegramPrompt(project.groupId, agentId, telegramPrompt)))}
+          {saveButton('prompt', () => save('prompt', () => putTelegramPrompt(project.groupId, project.projectId, telegramPrompt)))}
         </div>
         <textarea
           value={telegramPrompt}
