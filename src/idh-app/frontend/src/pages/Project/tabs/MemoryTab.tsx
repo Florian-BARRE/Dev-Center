@@ -1,9 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { theme } from '../../../theme';
 import MarkdownEditor from '../../../components/MarkdownEditor';
 import { getSessionMemory, putSessionMemory, getTranscript } from '../../../api/memory';
 import type { Project } from '../../../api/types';
 
+const TRANSPARENT_BG = 'none' as const;
+const NO_BORDER = 'none' as const;
 const EDITOR_MIN_HEIGHT = '400px';
 const TRANSCRIPT_PANEL_HEIGHT = '450px';
 
@@ -20,6 +22,7 @@ export default function MemoryTab({ project }: MemoryTabProps) {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const savedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     getSessionMemory(project.projectId)
@@ -30,13 +33,20 @@ export default function MemoryTab({ project }: MemoryTabProps) {
       .catch(() => setTranscript('(No transcript available)'));
   }, [project.projectId]);
 
+  useEffect(() => {
+    return () => {
+      if (savedTimerRef.current) clearTimeout(savedTimerRef.current);
+    };
+  }, []);
+
   const handleSave = async () => {
     setSaving(true);
     setError(null);
     try {
       await putSessionMemory(project.projectId, content);
       setSaved(true);
-      setTimeout(() => setSaved(false), 2000);
+      if (savedTimerRef.current) clearTimeout(savedTimerRef.current);
+      savedTimerRef.current = setTimeout(() => setSaved(false), 2000);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Save failed');
     } finally {
@@ -44,31 +54,40 @@ export default function MemoryTab({ project }: MemoryTabProps) {
     }
   };
 
-  const subTabBtn = (id: SubTab, label: string) => (
-    <button
-      key={id}
-      onClick={() => setSubTab(id)}
-      style={{
-        background: 'none',
-        border: 'none',
-        color: subTab === id ? theme.colors.text : theme.colors.muted,
-        fontFamily: theme.font.mono,
-        fontSize: theme.font.size.sm,
-        cursor: 'pointer',
-        padding: `${theme.spacing.xs} ${theme.spacing.md}`,
-        borderBottom: subTab === id ? `2px solid ${theme.colors.primary}` : '2px solid transparent',
-      }}
-    >
-      {label}
-    </button>
-  );
-
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: theme.spacing.md }}>
       {/* Sub-tab navigation */}
       <div style={{ display: 'flex', borderBottom: `1px solid ${theme.colors.border}` }}>
-        {subTabBtn('memory', 'SESSION_MEMORY.md')}
-        {subTabBtn('transcript', 'Transcript')}
+        <button
+          onClick={() => setSubTab('memory')}
+          style={{
+            background: TRANSPARENT_BG,
+            border: NO_BORDER,
+            color: subTab === 'memory' ? theme.colors.text : theme.colors.muted,
+            fontFamily: theme.font.mono,
+            fontSize: theme.font.size.sm,
+            cursor: 'pointer',
+            padding: `${theme.spacing.xs} ${theme.spacing.md}`,
+            borderBottom: subTab === 'memory' ? `2px solid ${theme.colors.primary}` : '2px solid transparent',
+          }}
+        >
+          SESSION_MEMORY.md
+        </button>
+        <button
+          onClick={() => setSubTab('transcript')}
+          style={{
+            background: TRANSPARENT_BG,
+            border: NO_BORDER,
+            color: subTab === 'transcript' ? theme.colors.text : theme.colors.muted,
+            fontFamily: theme.font.mono,
+            fontSize: theme.font.size.sm,
+            cursor: 'pointer',
+            padding: `${theme.spacing.xs} ${theme.spacing.md}`,
+            borderBottom: subTab === 'transcript' ? `2px solid ${theme.colors.primary}` : '2px solid transparent',
+          }}
+        >
+          Transcript
+        </button>
       </div>
 
       {error && (
