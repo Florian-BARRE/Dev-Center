@@ -89,25 +89,33 @@ mkdir -p "${IDH_DATA_ROOT}"/{config,workspaces,state,rules}
 # ─────────────────────────────────────────────────────────────
 log "Checking host auth credentials ..."
 
-if [ ! -d "$HOME/.claude" ]; then
-    warn "~/.claude not found — Claude Code auth is not available."
-    warn "Run 'claude auth login' on the host before using the bridge feature."
+# Claude Code (~/.claude) — required for the remote-control bridge feature
+if [ -d "$HOME/.claude" ]; then
+    log "  [OK] ~/.claude found — Claude Code auth available."
+else
+    warn "  [--] ~/.claude not found — Claude Code auth is NOT available."
+    warn "       Run 'claude' on the host to authenticate before using the bridge feature."
 fi
 
-if [ ! -d "$HOME/.codex" ]; then
-    warn "~/.codex not found — Codex auth is not available."
-    warn "Run 'codex auth login' on the host if you want Codex auto-summaries."
+# Codex (~/.codex) — required for auto-summary calls
+if [ -d "$HOME/.codex" ]; then
+    log "  [OK] ~/.codex found — Codex auth available."
+else
+    warn "  [--] ~/.codex not found — Codex auto-summaries will be unavailable."
+    warn "       Run 'codex' on the host to authenticate if you want this feature."
 fi
 
+# SSH key (~/.ssh/id_*) — required for git clone via SSH
 if ls "$HOME/.ssh"/id_* > /dev/null 2>&1; then
+    log "  [OK] SSH key found — git clone via SSH available."
     # Pre-populate GitHub in known_hosts so git clone doesn't prompt inside containers.
     if ! grep -q "github.com" "$HOME/.ssh/known_hosts" 2>/dev/null; then
-        log "Adding GitHub to ~/.ssh/known_hosts ..."
+        log "       Adding GitHub to ~/.ssh/known_hosts ..."
         ssh-keyscan github.com >> "$HOME/.ssh/known_hosts" 2>/dev/null
     fi
 else
-    warn "No SSH private key found in ~/.ssh/ — git clone via SSH will not work."
-    warn "Generate one: ssh-keygen -t ed25519 -C 'your@email.com'"
+    warn "  [--] No SSH private key found in ~/.ssh/ — git clone via SSH will not work."
+    warn "       Generate one: ssh-keygen -t ed25519 -C 'your@email.com'"
 fi
 
 # ─────────────────────────────────────────────────────────────
