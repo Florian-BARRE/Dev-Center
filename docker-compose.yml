@@ -1,7 +1,18 @@
 # IA-Dev-Hub — Production Docker Compose
-# Prerequisites: run ./setup.sh once to create ~/iah/ and ~/iah/.env
-# Start: docker compose up -d
-# Stop:  docker compose down
+#
+# First-time setup:
+#   1. Copy services/*/.env.example → services/*/.env and fill in values.
+#   2. Run ./setup.sh  (creates data dirs, seeds config, builds and starts everything)
+#
+# Subsequent starts:
+#   docker compose --env-file services/common/.env up -d
+#
+# Stop:
+#   docker compose --env-file services/common/.env down
+#
+# The --env-file flag loads services/common/.env for Docker Compose variable
+# interpolation (${IDH_DATA_ROOT}, ${OPENCLAW_GATEWAY_PORT}, …). It is NOT
+# the same as env_file inside a service — those inject variables into containers.
 
 services:
   openclaw-gateway:
@@ -14,19 +25,18 @@ services:
       # Dashboard port — OpenClaw web UI (reverse-proxied by Zoraxy)
       - "${OPENCLAW_DASHBOARD_PORT:-18790}:18790"
     env_file:
-      # Secrets loaded from host data directory (not committed to repo)
-      - ~/iah/.env
+      # OpenClaw-specific secrets (Telegram token, user ID)
+      - services/openclaw/.env
     volumes:
       # OpenClaw configuration, agents, and session data
-      - ~/iah/config:/home/node/.openclaw
+      - ${IDH_DATA_ROOT}/config:/home/node/.openclaw
       # Shared project workspaces (repos cloned by idh-app, read by OpenClaw tools)
-      - ~/iah/workspaces:/workspaces
+      - ${IDH_DATA_ROOT}/workspaces:/workspaces
       # Claude Code OAuth credentials — read-only, auth done on host
       - ~/.claude:/home/node/.claude:ro
       # Codex OAuth credentials — read-only
       - ~/.codex:/home/node/.codex:ro
-      # IDH plugin source at ./plugin/idh/ → mounted as the plugin directory.
-      # NOTE: spec shows ./plugin but ./plugin/idh/ is correct — idh/ is the plugin root.
+      # IDH plugin source mounted as the plugin directory (read-only)
       - ./plugin/idh:/home/node/.openclaw/plugins/idh:ro
     networks:
       - idh-net
@@ -46,16 +56,17 @@ services:
       # FastAPI + React dashboard (reverse-proxied by Zoraxy)
       - "${IDH_APP_PORT:-8000}:8000"
     env_file:
-      - ~/iah/.env
+      # IDH-specific config and secrets (webhook secret, logging, FastAPI settings)
+      - services/idh-plugin/.env
     volumes:
       # Shared project workspaces — same bind as openclaw-gateway and code-server
-      - ~/iah/workspaces:/workspaces
+      - ${IDH_DATA_ROOT}/workspaces:/workspaces
       # IDH state file — idh-app is sole writer (spec Section 1.7)
-      - ~/iah/state:/data
+      - ${IDH_DATA_ROOT}/state:/data
       # Coding rules and context templates — read-only
-      - ~/iah/rules:/rules:ro
+      - ${IDH_DATA_ROOT}/rules:/rules:ro
       # OpenClaw config dir — idh-app is sole writer of openclaw.json
-      - ~/iah/config:/openclaw-config
+      - ${IDH_DATA_ROOT}/config:/openclaw-config
       # Claude Code OAuth for remote-control bridge
       - ~/.claude:/home/app/.claude:ro
       # Codex OAuth for Codex API auto-summary calls
@@ -67,7 +78,8 @@ services:
     depends_on:
       - openclaw-gateway
     environment:
-      # Mount paths passed to RUNTIME_CONFIG via env vars
+      # Container-internal mount paths passed to RUNTIME_CONFIG via env vars.
+      # These are fixed — the host-side path is controlled by IDH_DATA_ROOT above.
       - DATA_DIR=/data
       - WORKSPACES_DIR=/workspaces
       - RULES_DIR=/rules
@@ -80,12 +92,16 @@ services:
     ports:
       # VS Code web UI (reverse-proxied by Zoraxy)
       - "${CODE_SERVER_PORT:-8443}:8080"
+    env_file:
+      # VS Code settings (optional password — see services/vscode/.env.example)
+      - services/vscode/.env
     volumes:
       # Same workspace volume as openclaw-gateway and idh-app
-      - ~/iah/workspaces:/workspaces
+      - ${IDH_DATA_ROOT}/workspaces:/workspaces
     networks:
       - idh-net
-    # Disable code-server auth — Zoraxy handles access control
+    # Disable code-server auth — Zoraxy handles access control.
+    # To enable password auth: remove --auth none and set PASSWORD in services/vscode/.env.
     command: --auth none /workspaces
 
 networks:

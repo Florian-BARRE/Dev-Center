@@ -20,9 +20,10 @@ logs/
 *.env
 
 # Dev data directory (local runtime data — not committed)
-# Use dev_data/* instead of dev_data/ so the negation below works.
-dev_data/*
-!dev_data/.env.example
+dev_data/
+
+# Service .env files contain secrets — only .env.example files are committed
+services/**/.env
 
 # OS
 .DS_Store
