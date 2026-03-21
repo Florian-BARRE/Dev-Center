@@ -80,3 +80,29 @@ class FileWriteRequest(_CamelModel):
     """
 
     content: str = Field(..., description="New file content.")
+
+
+class TelegramPromptResponse(_CamelModel):
+    """
+    Response model for reading a Telegram agent prompt.
+
+    Attributes:
+        agent_id (str): OpenClaw agent identifier.
+        system_prompt (str): Current system prompt for the agent.
+    """
+
+    agent_id: str
+    system_prompt: str
+
+
+class ModelResponse(_CamelModel):
+    """
+    Response model for reading a project's model override.
+
+    Attributes:
+        provider (str): AI provider slug.
+        model (str): Model identifier.
+    """
+
+    provider: str
+    model: str

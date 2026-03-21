@@ -128,3 +128,18 @@ class OpenClawConfigWriter(LoggerClass):
         # 1. Read and return the config under the file lock
         with self._lock:
             return self._read()
+
+    def get_agent_system_prompt(self, agent_id: str) -> str:
+        """
+        Read the system prompt for an agent from openclaw.json.
+
+        Args:
+            agent_id (str): OpenClaw agent identifier.
+
+        Returns:
+            str: The agent's system prompt (empty string if agent not found).
+        """
+        # 1. Load current config and extract the system prompt
+        config = self.read_config()
+        agents = config.get("agents", {})
+        return agents.get(agent_id, {}).get("system_prompt", "")

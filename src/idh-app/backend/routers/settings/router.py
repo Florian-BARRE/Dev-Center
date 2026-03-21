@@ -14,7 +14,7 @@ from fastapi import APIRouter, Header, HTTPException, Request
 from backend.context import CONTEXT
 from backend.libs.utils.error_handling import auto_handle_errors
 from libs.state.models import ModelOverride, Project
-from .models import FileContentResponse, FileWriteRequest, ModelUpdateRequest, SettingsResponse, TelegramPromptRequest, WebhookPayload
+from .models import FileContentResponse, FileWriteRequest, ModelResponse, ModelUpdateRequest, SettingsResponse, TelegramPromptRequest, TelegramPromptResponse, WebhookPayload
 
 router = APIRouter(tags=["settings"])
 
@@ -228,3 +228,109 @@ async def put_global_common_context(body: FileWriteRequest) -> SettingsResponse:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(body.content)
     return SettingsResponse(status="ok")
+
+
+@router.get("/settings/{group_id}/claude-md", response_model=FileContentResponse)
+@auto_handle_errors
+async def get_project_claude_md(group_id: str) -> FileContentResponse:
+    """
+    Read the CLAUDE.md file for a project.
+
+    Args:
+        group_id (str): Telegram group ID.
+
+    Returns:
+        FileContentResponse: CLAUDE.md content.
+
+    Raises:
+        HTTPException: 404 if project or file not found.
+    """
+    # 1. Look up project to get project_id
+    project = CONTEXT.state_manager.get_project(group_id)
+    if project is None:
+        raise HTTPException(status_code=404, detail=f"Project '{group_id}' not found")
+
+    # 2. Read CLAUDE.md from workspace
+    path = CONTEXT.RUNTIME_CONFIG.PATH_WORKSPACES / project.project_id / "CLAUDE.md"
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="CLAUDE.md not found in workspace")
+    return FileContentResponse(content=path.read_text())
+
+
+@router.put("/settings/{group_id}/claude-md", response_model=SettingsResponse)
+@auto_handle_errors
+async def put_project_claude_md(group_id: str, body: FileWriteRequest) -> SettingsResponse:
+    """
+    Write CLAUDE.md for a project.
+
+    Args:
+        group_id (str): Telegram group ID.
+        body (FileWriteRequest): New content.
+
+    Returns:
+        SettingsResponse: Success status.
+
+    Raises:
+        HTTPException: 404 if project not found.
+    """
+    # 1. Look up project
+    project = CONTEXT.state_manager.get_project(group_id)
+    if project is None:
+        raise HTTPException(status_code=404, detail=f"Project '{group_id}' not found")
+
+    # 2. Write to workspace CLAUDE.md
+    path = CONTEXT.RUNTIME_CONFIG.PATH_WORKSPACES / project.project_id / "CLAUDE.md"
+    path.write_text(body.content)
+    return SettingsResponse(status="ok")
+
+
+@router.get("/settings/{group_id}/telegram-prompt", response_model=TelegramPromptResponse)
+@auto_handle_errors
+async def get_telegram_prompt(group_id: str) -> TelegramPromptResponse:
+    """
+    Read the Telegram agent system prompt for a project.
+
+    Args:
+        group_id (str): Telegram group ID.
+
+    Returns:
+        TelegramPromptResponse: Agent ID and current system prompt.
+
+    Raises:
+        HTTPException: 404 if project not found.
+    """
+    # 1. Look up project
+    project = CONTEXT.state_manager.get_project(group_id)
+    if project is None:
+        raise HTTPException(status_code=404, detail=f"Project '{group_id}' not found")
+
+    # 2. Read from openclaw.json via config writer (agent_id == project_id by convention)
+    agent_id = project.project_id
+    prompt = CONTEXT.openclaw_writer.get_agent_system_prompt(agent_id)
+    return TelegramPromptResponse(agent_id=agent_id, system_prompt=prompt)
+
+
+@router.get("/settings/{group_id}/model", response_model=ModelResponse)
+@auto_handle_errors
+async def get_model(group_id: str) -> ModelResponse:
+    """
+    Read the model override for a project.
+
+    Args:
+        group_id (str): Telegram group ID.
+
+    Returns:
+        ModelResponse: Current provider and model.
+
+    Raises:
+        HTTPException: 404 if project not found.
+    """
+    # 1. Look up project
+    project = CONTEXT.state_manager.get_project(group_id)
+    if project is None:
+        raise HTTPException(status_code=404, detail=f"Project '{group_id}' not found")
+
+    # 2. Return current model override (empty strings if no override set)
+    if project.model_override:
+        return ModelResponse(provider=project.model_override.provider, model=project.model_override.model)
+    return ModelResponse(provider="", model="")
