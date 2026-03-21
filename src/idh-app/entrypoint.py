@@ -56,6 +56,7 @@ def _build_app() -> FastAPI:
     )
     CONTEXT.memory_manager = MemoryManager(
         claude_dir=RUNTIME_CONFIG.PATH_CLAUDE_DIR,
+        workspaces_dir=RUNTIME_CONFIG.PATH_WORKSPACES,
     )
     CONTEXT.codex_summarizer = CodexSummarizer(
         codex_dir=RUNTIME_CONFIG.PATH_CODEX_DIR,

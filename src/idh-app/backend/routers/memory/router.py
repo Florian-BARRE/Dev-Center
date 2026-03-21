@@ -74,11 +74,12 @@ async def get_session_memory(project_id: str) -> SessionMemoryResponse:
     Raises:
         HTTPException: 404 if file not found.
     """
-    # 1. Resolve path and read content
-    path = CONTEXT.RUNTIME_CONFIG.PATH_WORKSPACES / project_id / "SESSION_MEMORY.md"
-    if not path.exists():
+    # 1. Read content via memory manager
+    try:
+        content = CONTEXT.memory_manager.read_session_memory(project_id)
+    except FileNotFoundError:
         raise HTTPException(status_code=404, detail=f"SESSION_MEMORY.md not found for '{project_id}'")
-    return SessionMemoryResponse(project_id=project_id, content=path.read_text())
+    return SessionMemoryResponse(project_id=project_id, content=content)
 
 
 @router.put("/memory/{project_id}/session-memory", response_model=MemoryWriteResponse)
@@ -94,10 +95,8 @@ async def put_session_memory(project_id: str, body: MemoryWriteRequest) -> Memor
     Returns:
         MemoryWriteResponse: Success status.
     """
-    # 1. Resolve path and write content
-    path = CONTEXT.RUNTIME_CONFIG.PATH_WORKSPACES / project_id / "SESSION_MEMORY.md"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(body.content)
+    # 1. Write content via memory manager
+    CONTEXT.memory_manager.write_session_memory(project_id, body.content)
     return MemoryWriteResponse(status="ok")
 
 
@@ -119,11 +118,9 @@ async def get_transcript(project_id: str) -> TranscriptResponse:
     Raises:
         HTTPException: 404 if no transcript file exists.
     """
-    # 1. Find the newest JSONL file in workspace directory
-    ws = CONTEXT.RUNTIME_CONFIG.PATH_WORKSPACES / project_id
-    jsonl_files = sorted(ws.glob("*.jsonl"), key=lambda p: p.stat().st_mtime, reverse=True)
-    if not jsonl_files:
+    # 1. Get latest transcript via memory manager
+    try:
+        content = CONTEXT.memory_manager.get_latest_transcript(project_id)
+    except FileNotFoundError:
         raise HTTPException(status_code=404, detail=f"No transcript found for '{project_id}'")
-
-    # 2. Return raw JSONL content of the newest file
-    return TranscriptResponse(project_id=project_id, content=jsonl_files[0].read_text())
+    return TranscriptResponse(project_id=project_id, content=content)

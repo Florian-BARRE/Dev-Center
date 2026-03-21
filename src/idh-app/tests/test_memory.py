@@ -21,9 +21,17 @@ def claude_dir(tmp_path: pathlib.Path) -> pathlib.Path:
 
 
 @pytest.fixture
-def memory_manager(claude_dir: pathlib.Path) -> MemoryManager:
-    """Return a MemoryManager wired to the temp Claude dir."""
-    return MemoryManager(claude_dir=claude_dir)
+def workspaces_dir(tmp_path: pathlib.Path) -> pathlib.Path:
+    """Return a temp workspaces directory."""
+    d = tmp_path / "workspaces"
+    d.mkdir(parents=True)
+    return d
+
+
+@pytest.fixture
+def memory_manager(claude_dir: pathlib.Path, workspaces_dir: pathlib.Path) -> MemoryManager:
+    """Return a MemoryManager wired to the temp Claude dir and workspaces dir."""
+    return MemoryManager(claude_dir=claude_dir, workspaces_dir=workspaces_dir)
 
 
 @pytest.fixture

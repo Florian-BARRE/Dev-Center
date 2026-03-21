@@ -1,5 +1,6 @@
 # ====== Code Summary ======
-# MemoryManager — reads and writes per-project CLAUDE.md files.
+# MemoryManager — reads and writes per-project CLAUDE.md, SESSION_MEMORY.md,
+# and JSONL transcript files.
 
 # ====== Standard Library Imports ======
 import pathlib
@@ -10,24 +11,30 @@ from loggerplusplus import LoggerClass
 
 class MemoryManager(LoggerClass):
     """
-    Manages per-project memory stored as CLAUDE.md files.
+    Manages per-project memory files.
 
-    Memory files live at ``<claude_dir>/projects/<project_id>/CLAUDE.md``
+    CLAUDE.md files live at ``<claude_dir>/projects/<project_id>/CLAUDE.md``
     and are used to provide project context to Claude agents.
+
+    SESSION_MEMORY.md and JSONL transcript files live at
+    ``<workspaces_dir>/<project_id>/``.
 
     Attributes:
         _claude_dir (pathlib.Path): Root Claude configuration directory.
+        _workspaces_dir (pathlib.Path): Root workspaces directory.
     """
 
-    def __init__(self, claude_dir: pathlib.Path) -> None:
+    def __init__(self, claude_dir: pathlib.Path, workspaces_dir: pathlib.Path) -> None:
         """
         Initialise the MemoryManager.
 
         Args:
             claude_dir (pathlib.Path): Path to the Claude config directory.
+            workspaces_dir (pathlib.Path): Path to the workspaces root directory.
         """
         LoggerClass.__init__(self)
         self._claude_dir = claude_dir
+        self._workspaces_dir = workspaces_dir
 
     # ──────────────────────────── Private helpers ────────────────────────────
 
@@ -78,3 +85,60 @@ class MemoryManager(LoggerClass):
         # 2. Write the memory content
         path.write_text(content)
         self.logger.info(f"Memory written for project '{project_id}'")
+
+    def read_session_memory(self, project_id: str) -> str:
+        """
+        Read SESSION_MEMORY.md content for a project.
+
+        Args:
+            project_id (str): Project identifier.
+
+        Returns:
+            str: File content.
+
+        Raises:
+            FileNotFoundError: If SESSION_MEMORY.md does not exist.
+        """
+        # 1. Resolve path and return content
+        path = self._workspaces_dir / project_id / "SESSION_MEMORY.md"
+        if not path.exists():
+            raise FileNotFoundError(f"SESSION_MEMORY.md not found for '{project_id}'")
+        return path.read_text()
+
+    def write_session_memory(self, project_id: str, content: str) -> None:
+        """
+        Write content to SESSION_MEMORY.md for a project.
+
+        Creates the workspace directory if it does not exist.
+
+        Args:
+            project_id (str): Project identifier.
+            content (str): New content to write.
+        """
+        # 1. Ensure workspace directory exists and write content
+        path = self._workspaces_dir / project_id / "SESSION_MEMORY.md"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content)
+        self.logger.info(f"Session memory written for project '{project_id}'")
+
+    def get_latest_transcript(self, project_id: str) -> str:
+        """
+        Read the content of the most recently modified JSONL transcript file for a project.
+
+        Args:
+            project_id (str): Project identifier.
+
+        Returns:
+            str: Raw JSONL content.
+
+        Raises:
+            FileNotFoundError: If no .jsonl file exists in the project workspace.
+        """
+        # 1. Find newest JSONL file by modification time
+        ws = self._workspaces_dir / project_id
+        jsonl_files = sorted(ws.glob("*.jsonl"), key=lambda p: p.stat().st_mtime, reverse=True)
+        if not jsonl_files:
+            raise FileNotFoundError(f"No transcript found for '{project_id}'")
+
+        # 2. Return content of newest file
+        return jsonl_files[0].read_text()
