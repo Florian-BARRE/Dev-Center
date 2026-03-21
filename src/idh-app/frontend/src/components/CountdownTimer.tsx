@@ -19,6 +19,8 @@ export default function CountdownTimer({ expiresAt }: CountdownTimerProps) {
   const [remaining, setRemaining] = useState(() => new Date(expiresAt).getTime() - Date.now());
 
   useEffect(() => {
+    // Update immediately when expiresAt changes, then tick every second
+    setRemaining(new Date(expiresAt).getTime() - Date.now());
     const id = setInterval(() => {
       setRemaining(new Date(expiresAt).getTime() - Date.now());
     }, 1_000);

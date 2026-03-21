@@ -16,8 +16,10 @@ export default function ModelSelector({ provider, model, onChange, disabled }: M
       value={value}
       disabled={disabled}
       onChange={(e) => {
-        const [p, m] = e.target.value.split('|');
-        onChange(p, m);
+        const parts = e.target.value.split('|');
+        if (parts.length === 2) {
+          onChange(parts[0], parts[1]);
+        }
       }}
       style={{
         background: theme.colors.surface,
