@@ -29,6 +29,8 @@ class BridgeManager(LoggerClass):
         _codex_dir (pathlib.Path): Path to the Codex CLI home directory.
         _claude_dir (pathlib.Path): Path to the Claude config directory.
         _bridge_ttl_hours (int): Bridge lifetime in hours.
+        _processes (dict[str, asyncio.subprocess.Process]): In-memory map of
+            group_id → live subprocess handle for log streaming.
     """
 
     def __init__(
@@ -52,6 +54,8 @@ class BridgeManager(LoggerClass):
         self._codex_dir = codex_dir
         self._claude_dir = claude_dir
         self._bridge_ttl_hours = bridge_ttl_hours
+        # In-memory process map — enables log streaming via tail_logs()
+        self._processes: dict[str, asyncio.subprocess.Process] = {}
 
     # ──────────────────────────── Private helpers ────────────────────────────
 
@@ -139,7 +143,7 @@ class BridgeManager(LoggerClass):
         expires = self._expires_at()
         projects_dir = self._claude_dir / "projects"
 
-        # 3. Launch the claude remote-control subprocess
+        # 3. Launch the claude remote-control subprocess with stdout piped for log streaming
         self.logger.info(f"Starting bridge for group '{group_id}' in '{workspace}'")
         proc = await asyncio.create_subprocess_exec(
             "claude",
@@ -148,14 +152,17 @@ class BridgeManager(LoggerClass):
             "--codex-dir", str(self._codex_dir),
             "--claude-dir", str(self._claude_dir),
             "--claude-projects-dir", str(projects_dir),
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.STDOUT,
         )
 
-        # 4. Persist the bridge state
+        # 4. Persist the bridge state and retain the process handle for log streaming
         bridge = BridgeState(pid=proc.pid, workspace=str(workspace), expires_at=expires)
         project = self._state_manager.get_project(group_id)
         if project is not None:
             project.bridge = bridge
             self._state_manager.upsert_project(group_id, project)
+        self._processes[group_id] = proc
         self.logger.info(f"Bridge PID {proc.pid} started for group '{group_id}'")
 
     async def stop_bridge(self, group_id: str) -> None:
@@ -175,7 +182,58 @@ class BridgeManager(LoggerClass):
         self._kill_bridge(project.bridge.pid)
         project.bridge = None
         self._state_manager.upsert_project(group_id, project)
+        # Remove the in-memory process handle so tail_logs returns early
+        self._processes.pop(group_id, None)
         self.logger.info(f"Bridge stopped for group '{group_id}'")
+
+    async def renew_bridge(self, group_id: str) -> None:
+        """
+        Renew a bridge: stop the current process, then respawn it.
+
+        Args:
+            group_id (str): Telegram group ID.
+        """
+        # 1. Stop the current bridge (no-op if already stopped)
+        await self.stop_bridge(group_id)
+
+        # 2. Look up the project from state
+        project = self._state_manager.get_project(group_id)
+        if project is None:
+            self.logger.warning(f"Cannot renew bridge for group '{group_id}': project not found")
+            return
+
+        # 3. Determine workspace path — prefer persisted bridge workspace
+        if project.bridge is not None:
+            workspace = pathlib.Path(project.bridge.workspace)
+        else:
+            workspace = pathlib.Path(str(self._codex_dir.parent / "workspaces" / project.project_id))
+
+        # 4. Respawn the bridge in the resolved workspace
+        await self.start_bridge(group_id=group_id, workspace=workspace)
+
+    async def tail_logs(self, group_id: str):
+        """
+        Async generator that yields stdout lines from the active bridge process.
+
+        Yields one decoded, right-stripped line at a time. If no active process
+        exists for the group, a single sentinel message is yielded and the
+        generator exits.
+
+        Args:
+            group_id (str): Telegram group ID.
+
+        Yields:
+            str: One line of output at a time.
+        """
+        # 1. Look up the running subprocess handle
+        process = self._processes.get(group_id)
+        if process is None or process.stdout is None:
+            yield f"(no active bridge process for group '{group_id}')"
+            return
+
+        # 2. Stream stdout lines until the process closes its pipe
+        async for line in process.stdout:
+            yield line.decode().rstrip()
 
     async def start_watchdog(self) -> asyncio.Task:
         """

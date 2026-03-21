@@ -5,7 +5,7 @@
 import pathlib
 
 # ====== Third-Party Library Imports ======
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
 
 # ====== Internal Project Imports ======
 from backend.context import CONTEXT
@@ -94,3 +94,57 @@ async def stop_bridge(group_id: str) -> BridgeActionResponse:
     await CONTEXT.bridge_manager.stop_bridge(group_id)
 
     return BridgeActionResponse(status="stopped")
+
+
+@router.post("/bridge/{group_id}/renew", response_model=BridgeActionResponse)
+@auto_handle_errors
+async def renew_bridge(group_id: str) -> BridgeActionResponse:
+    """
+    Renew an active bridge: stop the current process and restart it.
+
+    Args:
+        group_id (str): Telegram group ID.
+
+    Returns:
+        BridgeActionResponse: Success status.
+
+    Raises:
+        HTTPException: 404 if the project does not exist.
+    """
+    # 1. Verify the project exists
+    project = CONTEXT.state_manager.get_project(group_id)
+    if project is None:
+        raise HTTPException(status_code=404, detail=f"Project '{group_id}' not found")
+
+    # 2. Trigger renewal (stop + respawn)
+    await CONTEXT.bridge_manager.renew_bridge(group_id)
+    return BridgeActionResponse(status="renewed")
+
+
+@router.websocket("/bridge/{group_id}/logs")
+async def bridge_logs_ws(websocket: WebSocket, group_id: str) -> None:
+    """
+    Stream live bridge stdout logs over WebSocket.
+
+    Accepts the connection, then sends one line per message until the bridge
+    process closes its pipe. Closes gracefully on client disconnect.
+
+    Args:
+        websocket (WebSocket): FastAPI WebSocket connection.
+        group_id (str): Telegram group ID.
+    """
+    await websocket.accept()
+    try:
+        # 1. Verify the project has an active bridge
+        project = CONTEXT.state_manager.get_project(group_id)
+        if project is None or project.bridge is None:
+            await websocket.send_text(f"No active bridge for group '{group_id}'.")
+            await websocket.close()
+            return
+
+        # 2. Stream logs line by line from the bridge manager
+        async for line in CONTEXT.bridge_manager.tail_logs(group_id):
+            await websocket.send_text(line)
+
+    except WebSocketDisconnect:
+        pass
