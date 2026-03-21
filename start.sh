@@ -326,9 +326,18 @@ done
 # Idempotent — safe to run on every start, including subsequent runs.
 # ─────────────────────────────────────────────────────────────
 log "Installing IDH plugin in openclaw-gateway ..."
-docker exec openclaw-gateway openclaw extensions install \
-    /home/node/.openclaw/plugins/idh || \
+docker compose --env-file services/common/.env exec openclaw-gateway sh -c \
+    'openclaw plugins install /home/node/.openclaw/plugins/idh' || \
     warn "Plugin install step failed — check: docker compose logs openclaw-gateway"
+
+# Fix permissions: Docker Desktop on Windows mounts all files as 777 (world-writable).
+# OpenClaw's security scanner blocks world-writable plugin files.
+# Chmod 755 the installed extension to satisfy the security check.
+log "Fixing plugin file permissions ..."
+docker compose --env-file services/common/.env exec openclaw-gateway sh -c \
+    'chmod -R 755 /home/node/.openclaw/extensions/idh-projects/' && \
+    log "  [OK] Plugin permissions fixed." || \
+    warn "  Permission fix failed — plugin may not load."
 
 # ─────────────────────────────────────────────────────────────
 # Done

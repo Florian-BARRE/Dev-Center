@@ -1,0 +1,10 @@
+{
+  "id": "idh-projects",
+  "name": "IDH Projects",
+  "description": "Manages IA-Dev-Hub coding projects via Telegram: project creation, bridge control, model switching.",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {}
+  }
+}
