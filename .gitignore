@@ -28,3 +28,6 @@ services/**/.env
 # OS
 .DS_Store
 Thumbs.db
+
+# IDE Jetbrain
+.idea
