@@ -102,8 +102,10 @@ COPY idh-app /app/idh-app
 COPY --from=ui-build /workspace/idh-app/frontend/dist /app/idh-app/frontend/dist
 
 # Copy and set permissions on the entrypoint script.
+# sed strips Windows carriage returns (\r) so the shebang resolves correctly
+# on Linux when the file was edited on Windows (CRLF → LF).
 COPY idh-app/entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
+RUN sed -i 's/\r$//' /entrypoint.sh && chmod +x /entrypoint.sh
 
 # Expose port 8000 — the port uvicorn listens on for FastAPI requests.
 EXPOSE 8000
