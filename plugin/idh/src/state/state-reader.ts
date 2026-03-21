@@ -4,9 +4,17 @@
 // Avoids per-message API calls while staying reasonably fresh.
 
 import type { Project } from "../types/idh";
+import { sidecar } from "../client/sidecar";
 
 type FetchProjects = () => Promise<Project[]>;
 
+/**
+ * Read-only cached view of the idh-app project list.
+ *
+ * Fetches via a caller-supplied async function and caches results
+ * for `ttlMs` milliseconds. Designed for use in OpenClaw hooks where
+ * `getByGroupId` is called on every incoming message.
+ */
 export class StateReader {
   private _cache: Map<string, Project> = new Map();
   private _lastFetchedAt = 0;
@@ -51,3 +59,6 @@ export class StateReader {
     return this._cache.get(groupId);
   }
 }
+
+// Singleton — wired to the sidecar client in index.ts
+export const stateReader = new StateReader(() => sidecar.getProjects());
