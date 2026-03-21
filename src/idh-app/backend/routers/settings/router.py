@@ -140,13 +140,10 @@ async def put_model(group_id: str, body: ModelUpdateRequest) -> SettingsResponse
     Raises:
         HTTPException: 404 if the project does not exist.
     """
-    # 1. Verify the project exists
-    project = CONTEXT.state_manager.get_project(group_id)
-    if project is None:
-        raise HTTPException(status_code=404, detail=f"Project '{group_id}' not found")
-
-    # 2. Apply the model override and persist
-    project.model_override = ModelOverride(provider=body.provider, model=body.model)
-    CONTEXT.state_manager.upsert_project(group_id, project)
+    # 1. Atomically read-modify-write the model override (raises 404 if missing)
+    CONTEXT.state_manager.set_model_override(
+        group_id,
+        ModelOverride(provider=body.provider, model=body.model),
+    )
 
     return SettingsResponse(status="ok")

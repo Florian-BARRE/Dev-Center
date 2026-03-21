@@ -5,11 +5,12 @@
 import pathlib
 
 # ====== Third-Party Library Imports ======
+from fastapi import HTTPException
 from filelock import FileLock
 from loggerplusplus import LoggerClass
 
 # ====== Local Project Imports ======
-from .models import Project, StateFile
+from .models import ModelOverride, Project, StateFile
 
 
 class StateManager(LoggerClass):
@@ -113,6 +114,34 @@ class StateManager(LoggerClass):
         with self._lock:
             state = self._read()
             state.projects[group_id] = project
+            self._write(state)
+
+    def set_model_override(self, group_id: str, model_override: ModelOverride) -> None:
+        """
+        Atomically update the model_override for a project.
+
+        Performs a single-lock read-modify-write to avoid TOCTOU races
+        between concurrent PUT /settings/{group_id}/model requests.
+
+        Args:
+            group_id (str): Telegram group ID of the project.
+            model_override (ModelOverride): New provider + model to apply.
+
+        Raises:
+            HTTPException: 404 if no project exists for this group_id.
+        """
+        # 1. Open a write lock and load current state
+        with self._lock:
+            state = self._read()
+
+            # 2. Verify the project exists (raise 404 if not)
+            if group_id not in state.projects:
+                raise HTTPException(
+                    status_code=404, detail=f"Project '{group_id}' not found"
+                )
+
+            # 3. Apply the override and persist
+            state.projects[group_id].model_override = model_override
             self._write(state)
 
     def delete_project(self, group_id: str) -> bool:
