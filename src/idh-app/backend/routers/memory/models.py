@@ -4,6 +4,9 @@
 # ====== Third-Party Library Imports ======
 from pydantic import BaseModel, Field
 
+# ====== Internal Project Imports ======
+from libs.state.models import _CamelModel
+
 
 class MemoryResponse(BaseModel):
     """
@@ -38,3 +41,29 @@ class MemoryWriteResponse(BaseModel):
     """
 
     status: str
+
+
+class SessionMemoryResponse(_CamelModel):
+    """
+    Response model for SESSION_MEMORY.md content.
+
+    Attributes:
+        project_id (str): Project identifier. Serialised as ``projectId`` in JSON.
+        content (str): Content of SESSION_MEMORY.md.
+    """
+
+    project_id: str
+    content: str
+
+
+class TranscriptResponse(_CamelModel):
+    """
+    Response model for the last session transcript.
+
+    Attributes:
+        project_id (str): Project identifier. Serialised as ``projectId`` in JSON.
+        content (str): Raw JSONL content of the transcript file.
+    """
+
+    project_id: str
+    content: str
