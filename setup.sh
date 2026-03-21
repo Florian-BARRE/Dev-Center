@@ -76,16 +76,41 @@ log "IDH_DATA_ROOT = ${IDH_DATA_ROOT}"
 # Pre-creating with mkdir avoids the CreateFile call entirely.
 # ─────────────────────────────────────────────────────────────
 
-# On Windows (Git Bash / MSYS), resolve the absolute path and check
-# for apostrophes — Docker Desktop cannot mount such paths.
+# On Windows (Git Bash / MSYS), validate the resolved path against two
+# known Docker Desktop bugs:
+#
+#  1. Apostrophe in path  — Docker's CreateFile call fails (Windows API rejects it).
+#
+#  2. JSON escape sequences — Docker serialises host paths in a JSON payload to the
+#     daemon. If the Windows-style path contains backslash + one of f n t r b a v 0
+#     (e.g. C:\Users\floot → \f = form feed), the daemon receives a corrupted path
+#     and CreateFile fails with "filename syntax incorrect".
+#     Common victims: any username starting with f, n, t, r, b, a, v, or 0.
+#     Fix: use a root-level path such as C:/dev-data that avoids C:\Users\<name>.
 if [[ "$OSTYPE" == "msys"* ]] || [[ "$OSTYPE" == "mingw"* ]] || [[ "$OSTYPE" == "cygwin"* ]]; then
     ABS_DATA_ROOT=$(realpath -m "${IDH_DATA_ROOT}" 2>/dev/null || echo "${PWD}/${IDH_DATA_ROOT#./}")
-    if [[ "$ABS_DATA_ROOT" == *"'"* ]]; then
+
+    # Convert to Windows-style backslash path for escape-sequence detection.
+    WIN_PATH=$(echo "$ABS_DATA_ROOT" | sed 's|/|\\|g')
+
+    BAD_PATH=false
+    REASON=""
+
+    if [[ "$WIN_PATH" == *"'"* ]]; then
+        BAD_PATH=true
+        REASON="contains an apostrophe (Windows API rejects it)"
+    elif echo "$WIN_PATH" | grep -qiE '\\[fntrba0v]'; then
+        BAD_PATH=true
+        REASON="contains a backslash + letter that Docker's JSON layer converts to a control character (e.g. \\f = form-feed, \\n = newline)"
+    fi
+
+    if [ "$BAD_PATH" = true ]; then
         echo ""
-        err "Docker Desktop on Windows cannot mount paths that contain an apostrophe.
-     Resolved path : ${ABS_DATA_ROOT}
-     Fix           : set IDH_DATA_ROOT to an absolute path with no spaces or apostrophes.
-     Example       : IDH_DATA_ROOT=C:/dev-data/idh
+        err "Docker Desktop on Windows cannot mount this path:
+     Path   : ${WIN_PATH}
+     Reason : ${REASON}
+     Fix    : set IDH_DATA_ROOT to a root-level path that avoids C:\\Users\\<username>.
+     Example: IDH_DATA_ROOT=C:/dev-data/idh
      Edit services/common/.env, then re-run ./setup.sh."
     fi
 fi
