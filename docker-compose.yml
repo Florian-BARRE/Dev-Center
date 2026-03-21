@@ -103,15 +103,11 @@ services:
     # Auth is conditional on the PASSWORD env var (set in services/vscode/.env):
     #   PASSWORD set   → code-server requires that password
     #   PASSWORD empty → no authentication (useful behind a reverse proxy like Zoraxy)
-    # $$ in the compose command becomes a literal $ passed to the container shell,
-    # which then evaluates $PASSWORD from the container environment at runtime.
-    command: >-
-      /bin/sh -c
-      'if [ -n "$$PASSWORD" ]; then
-         exec code-server --auth password /workspaces;
-       else
-         exec code-server --auth none /workspaces;
-       fi'
+    #
+    # entrypoint overrides the image's default (dumb-init + fixuid + code-server)
+    # so /bin/sh runs the conditional. $$ escapes to a literal $ inside the container.
+    entrypoint: ["/bin/sh", "-c"]
+    command: ['if [ -n "$$PASSWORD" ]; then exec code-server --auth password /workspaces; else exec code-server --auth none /workspaces; fi']
 
 networks:
   idh-net:
