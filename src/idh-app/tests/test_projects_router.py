@@ -105,3 +105,49 @@ def test_delete_project_success(client: TestClient, monkeypatch: pytest.MonkeyPa
     response = client.delete("/api/v1/projects/g1")
     assert response.status_code == 200
     assert response.json()["projectId"] == "p1"
+
+
+def test_create_project(client: TestClient, tmp_path: pathlib.Path) -> None:
+    """POST /projects/ creates a project and returns it."""
+    from unittest.mock import AsyncMock, MagicMock
+
+    from backend.context import CONTEXT
+
+    # Assign mock services onto CONTEXT before using them.
+    # CONTEXT attributes are only set during lifespan startup.
+    CONTEXT.git_manager = MagicMock()
+    CONTEXT.bridge_manager = MagicMock()
+    CONTEXT.memory_manager = MagicMock()
+    CONTEXT.openclaw_writer = MagicMock()
+
+    # Mock state_manager.get_project to return None (no duplicate)
+    CONTEXT.state_manager = MagicMock()
+    CONTEXT.state_manager.get_project = MagicMock(return_value=None)
+    CONTEXT.state_manager.upsert_project = MagicMock()
+
+    # Mock git_manager.clone to avoid real git operations
+    async def fake_clone(url: str, project_id: str) -> pathlib.Path:
+        return tmp_path / project_id
+
+    CONTEXT.git_manager.clone = AsyncMock(side_effect=fake_clone)
+
+    # Mock bridge_manager.start_bridge to avoid real bridge spawn
+    CONTEXT.bridge_manager.start_bridge = AsyncMock()
+
+    # Mock openclaw_writer.register_group and reload
+    CONTEXT.openclaw_writer.register_group = MagicMock()
+    CONTEXT.openclaw_writer.reload = AsyncMock()
+
+    response = client.post("/api/v1/projects/", json={
+        "groupId": "-100111",
+        "repoUrl": "git@github.com:user/repo.git",
+        "provider": "anthropic",
+        "model": "claude-opus-4-6",
+    })
+    assert response.status_code == 200
+    data = response.json()
+    assert data["groupId"] == "-100111"
+    assert data["modelOverride"]["model"] == "claude-opus-4-6"
+
+    # Verify openclaw reload was called after registering the group
+    CONTEXT.openclaw_writer.reload.assert_called_once()
