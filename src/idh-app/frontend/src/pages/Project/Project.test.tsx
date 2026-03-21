@@ -68,4 +68,15 @@ describe('ProjectPage', () => {
     fireEvent.click(screen.getByRole('button', { name: /settings/i }));
     await waitFor(() => expect(screen.getByRole('combobox')).toBeInTheDocument());
   });
+
+  it('settings tab loads and shows system prompt textarea', async () => {
+    renderWithRoute();
+    await waitFor(() => screen.getByRole('button', { name: /settings/i }));
+    fireEvent.click(screen.getByRole('button', { name: /settings/i }));
+    // The Settings tab renders two textareas: the Telegram Agent Prompt textarea
+    // and the MarkdownEditor (mocked as a textarea). Wait for them to appear and
+    // assert that at least one textbox (the Telegram prompt) is present.
+    const textboxes = await screen.findAllByRole('textbox');
+    expect(textboxes.length).toBeGreaterThanOrEqual(1);
+  });
 });
