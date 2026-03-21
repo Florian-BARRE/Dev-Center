@@ -7,6 +7,9 @@ import { startBridge, stopBridge, renewBridge, openBridgeLogs } from '../../../a
 import { getProject } from '../../../api/projects';
 import type { Project } from '../../../api/types';
 
+// Fixed height for the live log output panel
+const LOG_PANEL_HEIGHT = '280px';
+
 interface BridgeTabProps {
   project: Project;
   onProjectChange: (updated: Project) => void;
@@ -64,7 +67,7 @@ export default function BridgeTab({ project, onProjectChange }: BridgeTabProps) 
     borderRadius: theme.radius.md,
     cursor: loading ? 'not-allowed' : 'pointer',
     fontSize: theme.font.size.md,
-    fontWeight: 600,
+    fontWeight: theme.font.weight.semibold,
     background:
       variant === 'primary' ? theme.colors.primary :
       variant === 'danger'  ? theme.colors.danger  :
@@ -136,15 +139,15 @@ export default function BridgeTab({ project, onProjectChange }: BridgeTabProps) 
           </div>
           <div
             style={{
-              background: '#010409',
+              background: theme.colors.terminalBg,
               border: `1px solid ${theme.colors.border}`,
               borderRadius: theme.radius.md,
               padding: theme.spacing.md,
-              height: '280px',
+              height: LOG_PANEL_HEIGHT,
               overflowY: 'auto',
               fontFamily: theme.font.mono,
               fontSize: theme.font.size.xs,
-              color: '#8b949e',
+              color: theme.colors.muted,
             }}
           >
             {logs.length === 0 && (

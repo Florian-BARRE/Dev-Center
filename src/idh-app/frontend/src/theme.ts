@@ -12,6 +12,7 @@ export const theme = {
     muted: '#8b949e',
     link: '#58a6ff',
     onPrimary: '#ffffff',
+    terminalBg: '#010409',
   },
   spacing: {
     xs: '4px',
@@ -31,6 +32,11 @@ export const theme = {
       xl: '20px',
       xxl: '24px',
     },
+    weight: {
+      normal: 400,
+      semibold: 600,
+      bold: 700,
+    } as const,
   },
   radius: {
     sm: '4px',
