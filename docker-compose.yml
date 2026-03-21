@@ -100,9 +100,18 @@ services:
       - ${IDH_DATA_ROOT}/workspaces:/workspaces
     networks:
       - idh-net
-    # Disable code-server auth — Zoraxy handles access control.
-    # To enable password auth: remove --auth none and set PASSWORD in services/vscode/.env.
-    command: --auth none /workspaces
+    # Auth is conditional on the PASSWORD env var (set in services/vscode/.env):
+    #   PASSWORD set   → code-server requires that password
+    #   PASSWORD empty → no authentication (useful behind a reverse proxy like Zoraxy)
+    # $$ in the compose command becomes a literal $ passed to the container shell,
+    # which then evaluates $PASSWORD from the container environment at runtime.
+    command: >-
+      /bin/sh -c
+      'if [ -n "$$PASSWORD" ]; then
+         exec code-server --auth password /workspaces;
+       else
+         exec code-server --auth none /workspaces;
+       fi'
 
 networks:
   idh-net:

@@ -189,12 +189,10 @@ if [ ! -f "$OPENCLAW_JSON" ]; then
       "enabled": true,
       "botToken": "${TELEGRAM_BOT_TOKEN}",
       "groupPolicy": "allowlist",
-      "dmPolicy": "disabled",
-      "groups": {}
+      "dmPolicy": "allowlist",
+      "groups": {},
+      "allowFrom": ["${TELEGRAM_USER_ID}"]
     }
-  },
-  "auth": {
-    "allowFrom": ["${TELEGRAM_USER_ID}"]
   }
 }
 EOF
