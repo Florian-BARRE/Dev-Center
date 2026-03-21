@@ -148,3 +148,5 @@ async def bridge_logs_ws(websocket: WebSocket, group_id: str) -> None:
 
     except WebSocketDisconnect:
         pass
+    finally:
+        await websocket.close()

@@ -7,6 +7,7 @@ import datetime
 import os
 import pathlib
 import signal
+from collections.abc import AsyncIterator
 
 # ====== Third-Party Library Imports ======
 from loggerplusplus import LoggerClass
@@ -188,30 +189,30 @@ class BridgeManager(LoggerClass):
 
     async def renew_bridge(self, group_id: str) -> None:
         """
-        Renew a bridge: stop the current process, then respawn it.
+        Renew a bridge: stop the current one, then restart it using the same workspace.
 
         Args:
             group_id (str): Telegram group ID.
         """
-        # 1. Stop the current bridge (no-op if already stopped)
-        await self.stop_bridge(group_id)
-
-        # 2. Look up the project from state
+        # 1. Capture workspace from current bridge state BEFORE stopping
         project = self._state_manager.get_project(group_id)
         if project is None:
             self.logger.warning(f"Cannot renew bridge for group '{group_id}': project not found")
             return
+        workspace = pathlib.Path(project.bridge.workspace) if project.bridge is not None else None
 
-        # 3. Determine workspace path — prefer persisted bridge workspace
-        if project.bridge is not None:
-            workspace = pathlib.Path(project.bridge.workspace)
-        else:
-            workspace = pathlib.Path(str(self._codex_dir.parent / "workspaces" / project.project_id))
+        # 2. Stop the current bridge
+        await self.stop_bridge(group_id)
 
-        # 4. Respawn the bridge in the resolved workspace
+        # 3. If no prior workspace was recorded, we cannot restart
+        if workspace is None:
+            self.logger.warning(f"Cannot renew bridge for group '{group_id}': no prior workspace recorded")
+            return
+
+        # 4. Respawn bridge at the same workspace
         await self.start_bridge(group_id=group_id, workspace=workspace)
 
-    async def tail_logs(self, group_id: str):
+    async def tail_logs(self, group_id: str) -> AsyncIterator[str]:
         """
         Async generator that yields stdout lines from the active bridge process.
 

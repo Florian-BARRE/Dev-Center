@@ -1,5 +1,5 @@
 # ====== Code Summary ======
-# Tests for the /bridge/{group_id}/renew endpoint.
+# Tests for bridge action endpoints: renew and WebSocket logs.
 
 # ====== Third-Party Library Imports ======
 import pytest
