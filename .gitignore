@@ -33,4 +33,4 @@ Thumbs.db
 .idea
 
 # Git worktrees
-.worktrees/.claude/worktrees/
+.worktrees/
