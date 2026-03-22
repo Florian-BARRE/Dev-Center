@@ -2,12 +2,10 @@ import { useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { theme } from '../../../theme';
 import ModelSelector from '../../../components/ModelSelector';
-import MarkdownEditor from '../../../components/MarkdownEditor';
-import { getModel, putModel, getTelegramPrompt, putTelegramPrompt } from '../../../api/settings';
-import { getSessionMemory, putSessionMemory } from '../../../api/memory';
-import { ApiError } from '../../../api/client';
+import ContextSizeMeter from '../../../components/ContextSizeMeter';
+import { getTelegramModel, putTelegramModel, getTelegramPrompt, putTelegramPrompt, getContextSize } from '../../../api/settings';
 import { MODEL_OPTIONS } from '../../../api/types';
-import type { Project } from '../../../api/types';
+import type { Project, ContextSizeResponse } from '../../../api/types';
 
 interface TelegramTabProps {
   project: Project;
@@ -87,7 +85,8 @@ export default function TelegramTab({ project }: TelegramTabProps) {
   const [provider, setProvider] = useState(project.modelOverride?.provider ?? MODEL_OPTIONS[0].provider);
   const [model, setModel] = useState(project.modelOverride?.model ?? MODEL_OPTIONS[0].model);
   const [telegramPrompt, setTelegramPrompt] = useState('');
-  const [sessionMemory, setSessionMemory] = useState('');
+  const [agentId, setAgentId] = useState('');
+  const [contextSize, setContextSize] = useState<ContextSizeResponse | null>(null);
   const [saving, setSaving] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
@@ -101,24 +100,19 @@ export default function TelegramTab({ project }: TelegramTabProps) {
 
   useEffect(() => {
     let cancelled = false;
-    // SESSION_MEMORY.md may not exist yet — treat 404 as empty string
-    const sessionMemoryOrEmpty = getSessionMemory(project.projectId).catch((e) => {
-      if (e instanceof ApiError && e.status === 404) return { projectId: project.projectId, content: '' };
-      throw e;
-    });
-
     Promise.all([
-      getModel(project.groupId),
+      getTelegramModel(project.groupId),
       getTelegramPrompt(project.groupId),
-      sessionMemoryOrEmpty,
-    ]).then(([m, t, s]) => {
+      getContextSize(project.groupId),
+    ]).then(([m, t, c]) => {
       if (cancelled) return;
-      setProvider(m.provider); setModel(m.model);
+      if (m.provider) { setProvider(m.provider); setModel(m.model); }
+      setAgentId(t.agentId);
       setTelegramPrompt(t.systemPrompt);
-      setSessionMemory(s.content);
+      setContextSize(c);
     }).catch((e: Error) => { if (!cancelled) setError(e.message); });
     return () => { cancelled = true; };
-  }, [project.groupId, project.projectId]);
+  }, [project.groupId]);
 
   const save = async (id: string, fn: () => Promise<unknown>) => {
     setSaving(id); setError(null);
@@ -165,12 +159,12 @@ export default function TelegramTab({ project }: TelegramTabProps) {
         )}
 
         <SectionCard
-          title="AI Model"
+          title="Telegram Model"
           action={
             <SaveButton
               id="model"
               saving={saving}
-              onClick={() => save('model', () => putModel(project.groupId, provider, model))}
+              onClick={() => save('model', () => putTelegramModel(project.groupId, provider, model))}
             />
           }
         >
@@ -183,7 +177,7 @@ export default function TelegramTab({ project }: TelegramTabProps) {
             <SaveButton
               id="prompt"
               saving={saving}
-              onClick={() => save('prompt', () => putTelegramPrompt(project.groupId, project.projectId, telegramPrompt))}
+              onClick={() => save('prompt', () => putTelegramPrompt(project.groupId, agentId, telegramPrompt))}
             />
           }
         >
@@ -211,18 +205,11 @@ export default function TelegramTab({ project }: TelegramTabProps) {
           </div>
         </SectionCard>
 
-        <SectionCard
-          title="SESSION_MEMORY.md"
-          action={
-            <SaveButton
-              id="memory"
-              saving={saving}
-              onClick={() => save('memory', () => putSessionMemory(project.projectId, sessionMemory))}
-            />
-          }
-        >
-          <MarkdownEditor value={sessionMemory} onChange={setSessionMemory} minHeight="300px" />
-        </SectionCard>
+        {contextSize && (
+          <SectionCard title="Context Budget">
+            <ContextSizeMeter response={contextSize} />
+          </SectionCard>
+        )}
       </div>
 
       {/* Right panel */}
@@ -306,6 +293,20 @@ export default function TelegramTab({ project }: TelegramTabProps) {
               {toast}
             </div>
           )}
+        </SectionCard>
+
+        {/* Group Info */}
+        <SectionCard title="Group Info">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            <div>
+              <div style={{ fontSize: theme.font.size.xs, color: theme.colors.muted, fontFamily: theme.font.sans, marginBottom: '2px' }}>
+                Group ID
+              </div>
+              <div style={{ fontSize: theme.font.size.sm, fontFamily: theme.font.mono, color: theme.colors.text }}>
+                {project.groupId}
+              </div>
+            </div>
+          </div>
         </SectionCard>
       </div>
     </div>
