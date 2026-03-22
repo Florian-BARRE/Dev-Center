@@ -849,7 +849,7 @@ Then in the `_tick` method (which is async), find the point where a warning is s
                         )
 ```
 
-And at the start of `_tick` (or end), emit the tick event:
+At the **end** of `_tick` (after processing expirations), emit the tick event — this way `active_projects` reflects the post-tick state:
 
 ```python
         if self._event_bus is not None:
