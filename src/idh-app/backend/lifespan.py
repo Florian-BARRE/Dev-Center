@@ -14,7 +14,7 @@ from pyfiglet import Figlet
 from .context import CONTEXT
 
 # Total startup steps — update when adding/removing steps.
-TOTAL_STEPS = 3
+TOTAL_STEPS = 5
 
 
 def lifespan() -> Any:
@@ -33,6 +33,7 @@ def lifespan() -> Any:
     async def _lifespan(app: Any) -> AsyncIterator[None]:
         _ = app
         watchdog_task: asyncio.Task | None = None
+        scheduler_task: asyncio.Task | None = None
         try:
             # 1. Print startup banner
             banner = "\n" + Figlet(font="slant").renderText(
@@ -59,6 +60,14 @@ def lifespan() -> Any:
             log_step(3, "Bridge watchdog")
             watchdog_task = await CONTEXT.bridge_manager.start_watchdog()
 
+            # 5. Initialise activity log
+            log_step(4, "Activity log")
+            CONTEXT.logger.info(f"ActivityLog ready (capacity 200 entries)")
+
+            # 6. Start session scheduler
+            log_step(5, "Session scheduler")
+            scheduler_task = await CONTEXT.scheduler.start()
+
             # Yield — app is now running
             yield
 
@@ -68,6 +77,12 @@ def lifespan() -> Any:
                 watchdog_task.cancel()
                 try:
                     await watchdog_task
+                except asyncio.CancelledError:
+                    pass
+            if scheduler_task is not None:
+                scheduler_task.cancel()
+                try:
+                    await scheduler_task
                 except asyncio.CancelledError:
                     pass
 

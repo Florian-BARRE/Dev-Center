@@ -16,6 +16,9 @@ from .bridge.router import router as bridge_router
 # ------------------- Memory ---------------------- #
 from .memory.router import router as memory_router
 
+# ------------------- Monitoring ------------------ #
+from .monitoring.router import router as monitoring_router
+
 # ------------------- Public API ------------------ #
 __all__ = [
     "health_router",
@@ -24,4 +27,5 @@ __all__ = [
     "agents_router",
     "bridge_router",
     "memory_router",
+    "monitoring_router",
 ]
