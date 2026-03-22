@@ -5,7 +5,7 @@
 import datetime
 
 # ====== Third-Party Library Imports ======
-from fastapi import APIRouter
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 # ====== Internal Project Imports ======
 from backend.context import CONTEXT
@@ -140,3 +140,35 @@ async def get_activity(limit: int = 100) -> ActivityLogResponse:
     # 1. Fetch from ActivityLog service
     entries = CONTEXT.activity_log.recent(limit=limit)
     return ActivityLogResponse(entries=entries)
+
+
+@router.websocket("/monitoring/ws")
+async def monitoring_ws(websocket: WebSocket) -> None:
+    """
+    Stream real-time events to a connected WebSocket client.
+
+    Accepts the connection, subscribes to the EventBus, and forwards each
+    event as a JSON message until the client disconnects.
+
+    Note: This route cannot use ``@auto_handle_errors`` — HTTPException has
+    no effect on an already-upgraded WebSocket connection. Errors are logged
+    and the connection is closed cleanly.
+
+    Args:
+        websocket (WebSocket): The incoming WebSocket connection.
+    """
+    # 1. Upgrade the HTTP connection to WebSocket
+    await websocket.accept()
+    try:
+        # 2. Subscribe to the EventBus and stream events indefinitely
+        async for event in CONTEXT.event_bus.subscribe():
+            await websocket.send_json(event)
+    except WebSocketDisconnect:
+        # Client disconnected cleanly — no error to log
+        pass
+    except Exception as exc:
+        # 3. Log unexpected errors; subscribe() finally block cleans up the queue
+        CONTEXT.logger.error(f"[monitoring_ws] unexpected error: {exc}")
+    finally:
+        # 4. Ensure the WebSocket is closed on any exit path
+        await websocket.close()
