@@ -24,3 +24,10 @@ export function openBridgeLogs(groupId: string, onLine: (line: string) => void):
   ws.onmessage = (e) => onLine(e.data as string);
   return ws;
 }
+
+export function putAutoRenew(groupId: string, autoRenew: boolean): Promise<BridgeActionResponse> {
+  return apiFetch(`/api/v1/bridge/${groupId}/auto-renew`, {
+    method: 'PUT',
+    body: JSON.stringify({ autoRenew }),
+  });
+}

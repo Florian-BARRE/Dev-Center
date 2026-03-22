@@ -125,3 +125,35 @@ describe('settings API (extended)', () => {
     expect(mockFetch).toHaveBeenCalledWith('/api/v1/settings/g1/model', expect.any(Object));
   });
 });
+
+import type { ScheduleConfig, ContextSizeResponse, TimelineResponse, ActivityLogResponse } from './types';
+
+describe('new type shapes', () => {
+  it('ScheduleConfig has required fields', () => {
+    const c: ScheduleConfig = {
+      enabled: false,
+      windows: [],
+      warnLeadMinutes: 60,
+      warnIntervalMinutes: 10,
+      alertTemplate: 'test',
+    };
+    expect(c.enabled).toBe(false);
+  });
+
+  it('ContextSizeResponse has estimatedMax', () => {
+    const r: ContextSizeResponse = {
+      total: 0, claudeMd: 0, systemPrompt: 0, sessionMemory: 0, estimatedMax: 200000,
+    };
+    expect(r.estimatedMax).toBe(200000);
+  });
+
+  it('TimelineResponse has projects array', () => {
+    const r: TimelineResponse = { projects: [] };
+    expect(Array.isArray(r.projects)).toBe(true);
+  });
+
+  it('ActivityLogResponse has entries array', () => {
+    const r: ActivityLogResponse = { entries: [] };
+    expect(Array.isArray(r.entries)).toBe(true);
+  });
+});

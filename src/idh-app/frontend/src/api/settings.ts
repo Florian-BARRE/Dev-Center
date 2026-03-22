@@ -1,5 +1,5 @@
 import { apiFetch } from './client';
-import type { FileContentResponse, FileWriteResponse, TelegramPromptResponse, ModelResponse } from './types';
+import type { FileContentResponse, FileWriteResponse, TelegramPromptResponse, ModelResponse, ContextSizeResponse, ScheduleConfig, GlobalDefaults } from './types';
 
 // Global settings
 export function getGlobalCodingRules(): Promise<FileContentResponse> {
@@ -55,5 +55,46 @@ export function putModel(groupId: string, provider: string, model: string): Prom
   return apiFetch(`/api/v1/settings/${groupId}/model`, {
     method: 'PUT',
     body: JSON.stringify({ provider, model }),
+  });
+}
+
+// ── Per-project schedule + context size ──────────────────────────────────
+
+export function getContextSize(groupId: string): Promise<ContextSizeResponse> {
+  return apiFetch(`/api/v1/settings/${groupId}/context-size`, { method: 'GET' });
+}
+
+export function getProjectSchedule(groupId: string): Promise<ScheduleConfig> {
+  return apiFetch(`/api/v1/settings/${groupId}/schedule`, { method: 'GET' });
+}
+
+export function putProjectSchedule(groupId: string, config: ScheduleConfig | null): Promise<FileWriteResponse> {
+  return apiFetch(`/api/v1/settings/${groupId}/schedule`, {
+    method: 'PUT',
+    body: JSON.stringify(config),   // null body = revert to inherit global
+  });
+}
+
+// ── Global defaults + scheduling ─────────────────────────────────────────
+
+export function getGlobalDefaults(): Promise<GlobalDefaults> {
+  return apiFetch('/api/v1/settings/global/defaults', { method: 'GET' });
+}
+
+export function putGlobalDefaults(defaults: GlobalDefaults): Promise<FileWriteResponse> {
+  return apiFetch('/api/v1/settings/global/defaults', {
+    method: 'PUT',
+    body: JSON.stringify(defaults),
+  });
+}
+
+export function getGlobalScheduling(): Promise<ScheduleConfig> {
+  return apiFetch('/api/v1/settings/global/scheduling', { method: 'GET' });
+}
+
+export function putGlobalScheduling(config: ScheduleConfig): Promise<FileWriteResponse> {
+  return apiFetch('/api/v1/settings/global/scheduling', {
+    method: 'PUT',
+    body: JSON.stringify(config),
   });
 }
