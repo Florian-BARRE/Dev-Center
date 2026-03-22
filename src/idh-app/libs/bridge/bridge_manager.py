@@ -4,8 +4,10 @@
 # ====== Standard Library Imports ======
 import asyncio
 import datetime
+import json
 import os
 import pathlib
+import re
 import signal
 from collections.abc import AsyncIterator
 
@@ -55,8 +57,19 @@ class BridgeManager(LoggerClass):
         self._codex_dir = codex_dir
         self._claude_dir = claude_dir
         self._bridge_ttl_hours = bridge_ttl_hours
-        # In-memory process map — enables log streaming via tail_logs()
+        # In-memory process map — subprocess handle per group_id
         self._processes: dict[str, asyncio.subprocess.Process] = {}
+        # Per-group log history: ordered list of unique, ANSI-stripped lines.
+        # Written by _pipe_reader; read by tail_logs for replay and live streaming.
+        # Cleared when a bridge restarts so each session starts fresh.
+        self._log_history: dict[str, list[str]] = {}
+        # Per-group dedup set: O(1) membership test used by _pipe_reader to skip
+        # repeated lines from the claude remote-control TUI refresh (~1 s cycle).
+        self._log_seen: dict[str, set[str]] = {}
+
+    # ANSI escape sequence pattern — matches CSI sequences like \x1b[7A, \x1b[J, \x1b[0m
+    # and OSC sequences like \x1b]8;;url\x1b\\ used by claude remote-control's terminal UI.
+    _ANSI_ESCAPE = re.compile(r"\x1b(?:\[[0-9;]*[A-Za-z]|\][^\x1b]*(?:\x1b\\|\x07))")
 
     # ──────────────────────────── Private helpers ────────────────────────────
 
@@ -72,6 +85,60 @@ class BridgeManager(LoggerClass):
             + datetime.timedelta(hours=self._bridge_ttl_hours)
         ).isoformat()
 
+    def _trust_workspace(self, workspace: pathlib.Path) -> None:
+        """
+        Ensure the workspace path is trusted in ~/.claude.json before launching
+        a bridge subprocess.
+
+        Claude Code refuses to run ``remote-control`` in any directory that has
+        not been explicitly trusted via the interactive trust dialog. Inside the
+        container the workspace paths are Linux paths (e.g. /workspaces/Foo)
+        which are never present in the host-side ~/.claude.json that was built
+        from Windows paths. This method pre-accepts trust for the container
+        path so the bridge starts without user interaction.
+
+        The write is atomic: the JSON is written to a temp file first, then
+        renamed over the real file so a crash mid-write never corrupts it.
+
+        Args:
+            workspace (pathlib.Path): Workspace directory to mark as trusted.
+        """
+        # ~/.claude.json lives one level above the ~/.claude/ directory
+        claude_json = self._claude_dir.parent / ".claude.json"
+        workspace_str = str(workspace)
+
+        # 1. Load existing config — tolerate missing or malformed file
+        config: dict = {}
+        if claude_json.exists():
+            try:
+                config = json.loads(claude_json.read_text(encoding="utf-8"))
+            except (json.JSONDecodeError, OSError) as exc:
+                self.logger.warning(f"Could not parse {claude_json}: {exc} — starting fresh")
+
+        # 2. Skip if already trusted (idempotent)
+        projects: dict = config.setdefault("projects", {})
+        entry: dict = projects.setdefault(workspace_str, {})
+        if entry.get("hasTrustDialogAccepted") is True:
+            self.logger.debug(f"Workspace '{workspace_str}' already trusted")
+            return
+
+        # 3. Inject the minimal trust entry Claude Code expects
+        entry["hasTrustDialogAccepted"] = True
+        entry.setdefault("allowedTools", [])
+        entry.setdefault("mcpContextUris", [])
+        entry.setdefault("mcpServers", {})
+        entry.setdefault("enabledMcpjsonServers", [])
+        entry.setdefault("disabledMcpjsonServers", [])
+
+        # 4. Write back.
+        #    Note: ~/.claude.json is a Docker bind-mount from the host, so a cross-device
+        #    atomic rename (tmp → target) always fails with EBUSY/EXDEV. Write directly.
+        try:
+            claude_json.write_text(json.dumps(config, indent=2, ensure_ascii=False), encoding="utf-8")
+            self.logger.info(f"Trusted workspace '{workspace_str}' in {claude_json}")
+        except OSError as exc:
+            self.logger.error(f"Failed to write trust entry to {claude_json}: {exc}")
+
     def _kill_bridge(self, pid: int) -> None:
         """
         Send SIGTERM to a bridge process, ignoring process-not-found and permission errors.
@@ -86,6 +153,40 @@ class BridgeManager(LoggerClass):
             self.logger.warning(f"Bridge PID {pid} already gone")
         except PermissionError:
             self.logger.warning(f"No permission to signal bridge PID {pid} — PID may have been recycled")
+
+    # ──────────────────────────── Log pipe reader ─────────────────────────────
+
+    async def _pipe_reader(self, group_id: str, process: asyncio.subprocess.Process) -> None:
+        """
+        Background task that drains a bridge process's stdout pipe into history.
+
+        Runs for the lifetime of the bridge process. Each unique, ANSI-stripped
+        line is appended to ``_log_history[group_id]`` so that ``tail_logs`` can
+        replay the full session history to any client that connects or reconnects.
+
+        Args:
+            group_id (str): Telegram group ID owning this bridge.
+            process (asyncio.subprocess.Process): The bridge subprocess.
+        """
+        if process.stdout is None:
+            return
+
+        seen: set[str] = self._log_seen[group_id]
+        history: list[str] = self._log_history[group_id]
+
+        async for raw in process.stdout:
+            # 1. Strip ANSI cursor-movement / colour codes from TUI output
+            cleaned = self._ANSI_ESCAPE.sub("", raw.decode()).rstrip()
+
+            # 2. Skip blank lines and lines already recorded (TUI refresh dedup)
+            if not cleaned or cleaned in seen:
+                continue
+
+            # 3. Append to both the dedup set and the ordered history list
+            seen.add(cleaned)
+            history.append(cleaned)
+
+        self.logger.debug(f"Pipe reader for group '{group_id}' finished (process exited)")
 
     # ──────────────────────────── Protected (watchdog) ──────────────────────
 
@@ -140,30 +241,48 @@ class BridgeManager(LoggerClass):
             self.logger.info(f"Bridge already running for group '{group_id}' (PID {project.bridge.pid}) — skipping")
             return
 
-        # 2. Compute expiry and build the bridge command
+        # 2. Compute expiry
         expires = self._expires_at()
-        projects_dir = self._claude_dir / "projects"
 
-        # 3. Launch the claude remote-control subprocess with stdout piped for log streaming
+        # 3. Pre-accept workspace trust so claude remote-control starts non-interactively.
+        #    The container uses Linux paths (/workspaces/Foo) which are never present in
+        #    the host-side ~/.claude.json (built from Windows paths). Without this patch
+        #    the bridge exits immediately with "Workspace not trusted".
+        self._trust_workspace(workspace)
+
+        # 4. Launch the claude remote-control subprocess with stdout piped for log streaming.
+        #    --permission-mode bypassPermissions skips workspace trust and interactive
+        #    permission prompts (safe here — idh-app runs in an isolated Docker container).
+        #    NOTE: --dangerously-skip-permissions at the top-level breaks remote-control's
+        #    option parser in claude ≥ 2.1 and must NOT be used for this subcommand.
+        #    cwd sets the working directory so Claude Code operates on the project workspace.
+        #    --name labels the session on claude.ai/code for easy identification.
+        #    Use the workspace folder name (e.g. "Patrimonium") rather than the
+        #    Telegram group ID so the session is human-readable in the Claude UI.
+        session_name = workspace.name
         self.logger.info(f"Starting bridge for group '{group_id}' in '{workspace}'")
         proc = await asyncio.create_subprocess_exec(
             "claude",
             "remote-control",
-            "--workspace", str(workspace),
-            "--codex-dir", str(self._codex_dir),
-            "--claude-dir", str(self._claude_dir),
-            "--claude-projects-dir", str(projects_dir),
+            "--name", session_name,
+            "--permission-mode", "bypassPermissions",
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.STDOUT,
+            cwd=str(workspace),
         )
 
-        # 4. Persist the bridge state and retain the process handle for log streaming
+        # 4. Persist the bridge state, init log storage, start pipe reader.
+        #    Reset history and seen set so each bridge session starts fresh.
         bridge = BridgeState(pid=proc.pid, workspace=str(workspace), expires_at=expires)
         project = self._state_manager.get_project(group_id)
         if project is not None:
             project.bridge = bridge
             self._state_manager.upsert_project(group_id, project)
         self._processes[group_id] = proc
+        self._log_history[group_id] = []
+        self._log_seen[group_id] = set()
+        # Start the background task that drains stdout into _log_history.
+        asyncio.create_task(self._pipe_reader(group_id, proc))
         self.logger.info(f"Bridge PID {proc.pid} started for group '{group_id}'")
 
     async def stop_bridge(self, group_id: str) -> None:
@@ -214,27 +333,45 @@ class BridgeManager(LoggerClass):
 
     async def tail_logs(self, group_id: str) -> AsyncIterator[str]:
         """
-        Async generator that yields stdout lines from the active bridge process.
+        Async generator that streams bridge output to a WebSocket client.
 
-        Yields one decoded, right-stripped line at a time. If no active process
-        exists for the group, a single sentinel message is yielded and the
-        generator exits.
+        On every connection (including reconnects), replays the full history of
+        lines accumulated since the bridge started, then polls for new lines
+        every 100 ms until the bridge process exits.
+
+        The pipe is consumed exclusively by ``_pipe_reader``, which deduplicates
+        TUI refresh spam and writes unique lines into ``_log_history``.  This
+        method only reads from that list — multiple concurrent clients are safe.
 
         Args:
             group_id (str): Telegram group ID.
 
         Yields:
-            str: One line of output at a time.
+            str: One log line at a time (history first, then live updates).
         """
-        # 1. Look up the running subprocess handle
-        process = self._processes.get(group_id)
-        if process is None or process.stdout is None:
-            yield f"(no active bridge process for group '{group_id}')"
+        history: list[str] = self._log_history.get(group_id, [])
+
+        # 1. If there's no history and no active process, emit a sentinel and exit.
+        if not history and group_id not in self._processes:
+            yield f"(no active bridge for group '{group_id}')"
             return
 
-        # 2. Stream stdout lines until the process closes its pipe
-        async for line in process.stdout:
-            yield line.decode().rstrip()
+        # 2. Replay all lines accumulated so far — gives reconnecting clients the
+        #    full session context immediately.
+        pos = 0
+        while pos < len(history):
+            yield history[pos]
+            pos += 1
+
+        # 3. Poll for new lines written by the background _pipe_reader task.
+        #    Exit when the process is no longer tracked (stopped or expired).
+        while group_id in self._processes:
+            if pos < len(history):
+                yield history[pos]
+                pos += 1
+            else:
+                # No new lines yet — yield control and check again shortly.
+                await asyncio.sleep(0.1)
 
     async def start_watchdog(self) -> asyncio.Task:
         """

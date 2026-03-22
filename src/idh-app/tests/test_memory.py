@@ -13,14 +13,6 @@ from libs.memory.codex_summarizer import CodexSummarizer
 
 
 @pytest.fixture
-def claude_dir(tmp_path: pathlib.Path) -> pathlib.Path:
-    """Return a temp Claude config directory with the projects subdir."""
-    d = tmp_path / "claude"
-    (d / "projects").mkdir(parents=True)
-    return d
-
-
-@pytest.fixture
 def workspaces_dir(tmp_path: pathlib.Path) -> pathlib.Path:
     """Return a temp workspaces directory."""
     d = tmp_path / "workspaces"
@@ -29,9 +21,9 @@ def workspaces_dir(tmp_path: pathlib.Path) -> pathlib.Path:
 
 
 @pytest.fixture
-def memory_manager(claude_dir: pathlib.Path, workspaces_dir: pathlib.Path) -> MemoryManager:
-    """Return a MemoryManager wired to the temp Claude dir and workspaces dir."""
-    return MemoryManager(claude_dir=claude_dir, workspaces_dir=workspaces_dir)
+def memory_manager(workspaces_dir: pathlib.Path) -> MemoryManager:
+    """Return a MemoryManager wired to the temp workspaces dir."""
+    return MemoryManager(workspaces_dir=workspaces_dir)
 
 
 @pytest.fixture
@@ -55,10 +47,10 @@ def test_read_memory_returns_none_when_missing(memory_manager: MemoryManager) ->
     assert result is None
 
 
-def test_memory_file_path(memory_manager: MemoryManager, claude_dir: pathlib.Path) -> None:
-    """CLAUDE.md is written inside <claude_dir>/projects/<project_id>/CLAUDE.md."""
+def test_memory_file_path(memory_manager: MemoryManager, workspaces_dir: pathlib.Path) -> None:
+    """CLAUDE.md is written at <workspaces_dir>/<project_id>/CLAUDE.md."""
     memory_manager.write_memory("proj-2", "content")
-    expected = claude_dir / "projects" / "proj-2" / "CLAUDE.md"
+    expected = workspaces_dir / "proj-2" / "CLAUDE.md"
     assert expected.exists()
 
 

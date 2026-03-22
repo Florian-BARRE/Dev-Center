@@ -24,18 +24,19 @@ class OpenClawConfigWriter(LoggerClass):
         _gateway_base_url (str): Base URL for the OpenClaw gateway API.
     """
 
-    def __init__(self, config_path: pathlib.Path, gateway_port: int) -> None:
+    def __init__(self, config_path: pathlib.Path, gateway_url: str) -> None:
         """
         Initialise the writer.
 
         Args:
             config_path (pathlib.Path): Path to the openclaw.json config file.
-            gateway_port (int): Port number for the local OpenClaw gateway.
+            gateway_url (str): Base URL for the OpenClaw gateway API
+                (e.g. ``http://openclaw-gateway:18789`` inside Docker).
         """
         LoggerClass.__init__(self)
         self._config_path = config_path
         self._lock = FileLock(str(config_path) + ".lock")
-        self._gateway_base_url = f"http://localhost:{gateway_port}"
+        self._gateway_base_url = gateway_url
 
     # ──────────────────────────── Private helpers ────────────────────────────
 
@@ -101,6 +102,18 @@ class OpenClawConfigWriter(LoggerClass):
             f"{self._gateway_base_url}/api/channels/telegram/groups",
             json={"group_id": group_id, "project_id": project_id, "agent_id": agent_id},
         )
+
+    async def reload(self) -> None:
+        """
+        No-op placeholder for config reload.
+
+        ``register_group`` and ``delete_group`` call the gateway API directly,
+        which updates the gateway's in-memory state immediately — no separate
+        reload step is required.  This method exists so callers can call
+        ``await writer.reload()`` without errors; implement it if a future
+        OpenClaw version exposes a dedicated reload endpoint.
+        """
+        self.logger.debug(f"reload() called — no-op (gateway API handles state directly)")
 
     def delete_group(self, group_id: str) -> httpx.Response:
         """

@@ -131,7 +131,8 @@ mkdir -p \
     "${IDH_DATA_ROOT}/config" \
     "${IDH_DATA_ROOT}/workspaces" \
     "${IDH_DATA_ROOT}/state" \
-    "${IDH_DATA_ROOT}/rules"
+    "${IDH_DATA_ROOT}/rules" \
+    "${IDH_DATA_ROOT}/rules/sources"
 log "  [OK] Data directories ready."
 
 # ─────────────────────────────────────────────────────────────
@@ -176,17 +177,20 @@ else
     warn "       Run 'codex' on the host to authenticate if you want this feature."
 fi
 
-# SSH key (~/.ssh/id_*) — required for git clone/push via SSH.
-if ls "$HOME/.ssh"/id_* > /dev/null 2>&1; then
-    log "  [OK] SSH key found — git clone via SSH available."
+# SSH key — required for git clone/push via SSH.
+# SSH_KEY_PATH defaults to ~/.ssh if not set in services/common/.env.
+SSH_DIR="${SSH_KEY_PATH:-$HOME/.ssh}"
+if ls "$SSH_DIR"/id_* > /dev/null 2>&1; then
+    log "  [OK] SSH key found at ${SSH_DIR} — git clone via SSH available."
     # Pre-populate GitHub in known_hosts so git clone never prompts inside containers.
-    if ! grep -q "github.com" "$HOME/.ssh/known_hosts" 2>/dev/null; then
-        log "       Adding GitHub to ~/.ssh/known_hosts ..."
-        ssh-keyscan github.com >> "$HOME/.ssh/known_hosts" 2>/dev/null
+    if ! grep -q "github.com" "$SSH_DIR/known_hosts" 2>/dev/null; then
+        log "       Adding GitHub to ${SSH_DIR}/known_hosts ..."
+        ssh-keyscan github.com >> "$SSH_DIR/known_hosts" 2>/dev/null
     fi
 else
-    warn "  [--] No SSH key found in ~/.ssh/ — git clone via SSH will not work."
+    warn "  [--] No SSH key found in ${SSH_DIR}/ — git clone via SSH will not work."
     warn "       Generate one: ssh-keygen -t ed25519 -C 'your@email.com'"
+    warn "       Or set SSH_KEY_PATH in services/common/.env to point to the right directory."
 fi
 
 # ─────────────────────────────────────────────────────────────
@@ -346,7 +350,10 @@ log ""
 log "IA-Dev-Hub is running!"
 log "   OpenClaw gateway  : http://localhost:${OPENCLAW_GATEWAY_PORT:-18789}"
 log "   OpenClaw dashboard: http://localhost:${OPENCLAW_DASHBOARD_PORT:-18790}"
-log "   IDH App           : http://localhost:${IDH_APP_PORT:-8000}"
+log "   IDH App (API)     : http://localhost:${IDH_APP_PORT:-8000}"
+if [ "$DEV_MODE" = true ]; then
+log "   Frontend (HMR)    : http://localhost:${IDH_FRONTEND_DEV_PORT:-5173}  ← use this in dev"
+fi
 log "   VS Code Server    : http://localhost:${CODE_SERVER_PORT:-8443}"
 log ""
 log "Test plugin: send /idh_ping in any Telegram group the bot is in."

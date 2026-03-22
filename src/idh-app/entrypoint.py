@@ -14,15 +14,11 @@ from loggerplusplus import loggerplusplus
 from config import RUNTIME_CONFIG  # MUST be first — registers sys.path
 
 from backend import CONTEXT, create_app
-from libs.activity.activity_log import ActivityLog
 from libs.bridge.bridge_manager import BridgeManager
 from libs.git_ops.git_manager import GitManager
-from libs.global_config.global_config_manager import GlobalConfigManager
 from libs.memory.codex_summarizer import CodexSummarizer
 from libs.memory.memory_manager import MemoryManager
 from libs.openclaw_config.config_writer import OpenClawConfigWriter
-from libs.scheduler.scheduler import SchedulerService
-from libs.scheduler.telegram_notifier import TelegramNotifier
 from libs.state.state_manager import StateManager
 from libs.webhook.webhook_client import WebhookClient
 
@@ -44,7 +40,7 @@ def _build_app() -> FastAPI:
     )
     CONTEXT.openclaw_writer = OpenClawConfigWriter(
         config_path=RUNTIME_CONFIG.PATH_OPENCLAW_CONFIG,
-        gateway_port=RUNTIME_CONFIG.OPENCLAW_GATEWAY_PORT,
+        gateway_url=RUNTIME_CONFIG.OPENCLAW_GATEWAY_URL,
     )
     CONTEXT.git_manager = GitManager(
         workspaces_dir=RUNTIME_CONFIG.PATH_WORKSPACES,
@@ -59,27 +55,10 @@ def _build_app() -> FastAPI:
         bridge_ttl_hours=RUNTIME_CONFIG.BRIDGE_TTL_HOURS,
     )
     CONTEXT.memory_manager = MemoryManager(
-        claude_dir=RUNTIME_CONFIG.PATH_CLAUDE_DIR,
         workspaces_dir=RUNTIME_CONFIG.PATH_WORKSPACES,
     )
     CONTEXT.codex_summarizer = CodexSummarizer(
         codex_dir=RUNTIME_CONFIG.PATH_CODEX_DIR,
-    )
-
-    CONTEXT.activity_log = ActivityLog(max_entries=200)
-
-    CONTEXT.global_config_manager = GlobalConfigManager(
-        config_path=RUNTIME_CONFIG.PATH_DATA_DIR / "idh-global-config.json",
-    )
-
-    telegram_notifier = TelegramNotifier(bot_token=RUNTIME_CONFIG.TELEGRAM_BOT_TOKEN)
-    CONTEXT.scheduler = SchedulerService(
-        state_manager=CONTEXT.state_manager,
-        bridge_manager=CONTEXT.bridge_manager,
-        global_config_manager=CONTEXT.global_config_manager,
-        activity_log=CONTEXT.activity_log,
-        telegram_notifier=telegram_notifier,
-        workspaces_dir=RUNTIME_CONFIG.PATH_WORKSPACES,
     )
 
     # 3. Create the FastAPI app

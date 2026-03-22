@@ -8,17 +8,15 @@ import json
 import pathlib
 
 # ====== Third-Party Library Imports ======
-from fastapi import APIRouter, Header, HTTPException, Request
+from fastapi import APIRouter, Header, HTTPException, Request, UploadFile, File
 
 # ====== Internal Project Imports ======
 from backend.context import CONTEXT
 from backend.libs.utils.error_handling import auto_handle_errors
-from libs.state.models import GlobalDefaults, ModelOverride, Project, ScheduleConfig
-from .models import ContextSizeResponse, FileContentResponse, FileWriteRequest, ModelResponse, ModelUpdateRequest, ScheduleRequest, SettingsResponse, TelegramPromptRequest, TelegramPromptResponse, WebhookPayload
+from libs.state.models import ModelOverride, Project
+from .models import FileContentResponse, FileWriteRequest, ModelResponse, ModelUpdateRequest, RuleFileInfo, RuleFilesListResponse, SettingsResponse, TelegramPromptRequest, TelegramPromptResponse, WebhookPayload
 
 router = APIRouter(tags=["settings"])
-
-_CHARS_PER_TOKEN = 4  # simple heuristic
 
 
 def _verify_signature(body: bytes, signature: str) -> bool:
@@ -39,21 +37,6 @@ def _verify_signature(body: bytes, signature: str) -> bool:
     # 2. Compare constant-time to prevent timing attacks
     return hmac.compare_digest(expected, signature)
 
-
-def _estimate_tokens(text: str) -> int:
-    """
-    Estimate token count using a 4-chars-per-token heuristic.
-
-    Args:
-        text (str): Input text to estimate.
-
-    Returns:
-        int: Estimated token count (non-negative).
-    """
-    return max(0, len(text) // _CHARS_PER_TOKEN)
-
-
-# ─── Non-parameterized routes ────────────────────────────────────────────────
 
 @router.post("/settings/webhook", response_model=SettingsResponse)
 @auto_handle_errors
@@ -142,7 +125,30 @@ async def put_telegram_prompt(
     return SettingsResponse(status="ok")
 
 
-# ─── /settings/global/* routes ───────────────────────────────────────────────
+@router.put("/settings/{group_id}/model", response_model=SettingsResponse)
+@auto_handle_errors
+async def put_model(group_id: str, body: ModelUpdateRequest) -> SettingsResponse:
+    """
+    Update the model override for a project (called from /agent wizard).
+
+    Args:
+        group_id (str): Telegram group ID.
+        body (ModelUpdateRequest): New provider and model.
+
+    Returns:
+        SettingsResponse: Success status.
+
+    Raises:
+        HTTPException: 404 if the project does not exist.
+    """
+    # 1. Atomically read-modify-write the model override (raises 404 if missing)
+    CONTEXT.state_manager.set_model_override(
+        group_id,
+        ModelOverride(provider=body.provider, model=body.model),
+    )
+
+    return SettingsResponse(status="ok")
+
 
 @router.get("/settings/global/coding-rules", response_model=FileContentResponse)
 @auto_handle_errors
@@ -223,66 +229,6 @@ async def put_global_common_context(body: FileWriteRequest) -> SettingsResponse:
     path.write_text(body.content)
     return SettingsResponse(status="ok")
 
-
-@router.get("/settings/global/defaults", response_model=GlobalDefaults)
-@auto_handle_errors
-async def get_global_defaults() -> GlobalDefaults:
-    """
-    Return global project defaults.
-
-    Returns:
-        GlobalDefaults: Current global defaults.
-    """
-    return CONTEXT.global_config_manager.get_defaults()
-
-
-@router.put("/settings/global/defaults", response_model=SettingsResponse)
-@auto_handle_errors
-async def put_global_defaults(body: GlobalDefaults) -> SettingsResponse:
-    """
-    Save global project defaults.
-
-    Args:
-        body (GlobalDefaults): New global defaults.
-
-    Returns:
-        SettingsResponse: Success status.
-    """
-    # 1. Delegate to global config manager
-    CONTEXT.global_config_manager.save_defaults(body)
-    return SettingsResponse(status="ok")
-
-
-@router.get("/settings/global/scheduling", response_model=ScheduleConfig)
-@auto_handle_errors
-async def get_global_scheduling() -> ScheduleConfig:
-    """
-    Return global schedule config.
-
-    Returns:
-        ScheduleConfig: Current global schedule.
-    """
-    return CONTEXT.global_config_manager.get_schedule()
-
-
-@router.put("/settings/global/scheduling", response_model=SettingsResponse)
-@auto_handle_errors
-async def put_global_scheduling(body: ScheduleConfig) -> SettingsResponse:
-    """
-    Save global schedule config.
-
-    Args:
-        body (ScheduleConfig): New global schedule.
-
-    Returns:
-        SettingsResponse: Success status.
-    """
-    # 1. Delegate to global config manager
-    CONTEXT.global_config_manager.save_schedule(body)
-    return SettingsResponse(status="ok")
-
-
-# ─── /settings/{group_id}/* routes ───────────────────────────────────────────
 
 @router.get("/settings/{group_id}/claude-md", response_model=FileContentResponse)
 @auto_handle_errors
@@ -390,127 +336,126 @@ async def get_model(group_id: str) -> ModelResponse:
     return ModelResponse(provider="", model="")
 
 
-@router.put("/settings/{group_id}/model", response_model=SettingsResponse)
+# ──────────────────────────── Rule source files ──────────────────────────────
+
+def _sources_dir() -> pathlib.Path:
+    """Return the directory that stores individual uploaded rule source files."""
+    return CONTEXT.RUNTIME_CONFIG.PATH_RULES_DIR / "sources"
+
+
+@router.get("/settings/global/coding-rules/files", response_model=RuleFilesListResponse)
 @auto_handle_errors
-async def put_model(group_id: str, body: ModelUpdateRequest) -> SettingsResponse:
+async def list_rule_files() -> RuleFilesListResponse:
     """
-    Update the model override for a project (called from /agent wizard).
+    List all uploaded rule source files in the sources/ directory.
+
+    Returns:
+        RuleFilesListResponse: Sorted list of rule file metadata.
+    """
+    # 1. Ensure the sources directory exists before listing
+    sources = _sources_dir()
+    sources.mkdir(parents=True, exist_ok=True)
+
+    # 2. Collect metadata for every .md file, sorted alphabetically
+    files = sorted(
+        [
+            RuleFileInfo(filename=f.name, size_bytes=f.stat().st_size)
+            for f in sources.iterdir()
+            if f.is_file() and f.suffix == ".md"
+        ],
+        key=lambda x: x.filename,
+    )
+    return RuleFilesListResponse(files=files)
+
+
+@router.post("/settings/global/coding-rules/upload", response_model=SettingsResponse)
+@auto_handle_errors
+async def upload_rule_file(file: UploadFile = File(...)) -> SettingsResponse:
+    """
+    Upload a Markdown rule source file to the sources/ directory.
+
+    Only ``.md`` files are accepted. Existing files with the same name
+    are silently overwritten.
 
     Args:
-        group_id (str): Telegram group ID.
-        body (ModelUpdateRequest): New provider and model.
+        file (UploadFile): The uploaded Markdown file.
 
     Returns:
         SettingsResponse: Success status.
 
     Raises:
-        HTTPException: 404 if the project does not exist.
+        HTTPException: 400 if the file is not a ``.md`` file.
     """
-    # 1. Atomically read-modify-write the model override (raises 404 if missing)
-    CONTEXT.state_manager.set_model_override(
-        group_id,
-        ModelOverride(provider=body.provider, model=body.model),
-    )
+    # 1. Validate extension
+    if not (file.filename or "").lower().endswith(".md"):
+        raise HTTPException(status_code=400, detail="Only .md files are accepted.")
+
+    # 2. Write the uploaded file to sources/
+    sources = _sources_dir()
+    sources.mkdir(parents=True, exist_ok=True)
+    dest = sources / pathlib.Path(file.filename).name
+    dest.write_bytes(await file.read())
 
     return SettingsResponse(status="ok")
 
 
-@router.get("/settings/{group_id}/context-size", response_model=ContextSizeResponse)
+@router.delete("/settings/global/coding-rules/files/{filename}", response_model=SettingsResponse)
 @auto_handle_errors
-async def get_context_size(group_id: str) -> ContextSizeResponse:
+async def delete_rule_file(filename: str) -> SettingsResponse:
     """
-    Return estimated token counts for a project's context files.
+    Delete a rule source file from the sources/ directory.
 
     Args:
-        group_id (str): Telegram group ID.
-
-    Returns:
-        ContextSizeResponse: Token counts per file and total.
-
-    Raises:
-        HTTPException: 404 if project not found.
-    """
-    # 1. Look up project
-    project = CONTEXT.state_manager.get_project(group_id)
-    if project is None:
-        raise HTTPException(status_code=404, detail=f"Project '{group_id}' not found")
-
-    # 2. Read CLAUDE.md (empty string if missing)
-    claude_md_path = CONTEXT.RUNTIME_CONFIG.PATH_WORKSPACES / project.project_id / "CLAUDE.md"
-    claude_md_text = claude_md_path.read_text() if claude_md_path.exists() else ""
-
-    # 3. Read system prompt via openclaw_writer (agent_id == project_id by convention)
-    system_prompt_text = CONTEXT.openclaw_writer.get_agent_system_prompt(project.project_id)
-
-    # 4. Read SESSION_MEMORY.md via memory_manager
-    try:
-        session_memory_text = CONTEXT.memory_manager.read_memory(project.project_id)
-    except Exception:
-        session_memory_text = ""
-
-    # 5. Compute individual estimates
-    claude_md_tokens = _estimate_tokens(claude_md_text)
-    system_prompt_tokens = _estimate_tokens(system_prompt_text)
-    session_memory_tokens = _estimate_tokens(session_memory_text)
-    total = claude_md_tokens + system_prompt_tokens + session_memory_tokens
-
-    return ContextSizeResponse(
-        total=total,
-        claude_md=claude_md_tokens,
-        system_prompt=system_prompt_tokens,
-        session_memory=session_memory_tokens,
-    )
-
-
-@router.get("/settings/{group_id}/schedule", response_model=ScheduleConfig)
-@auto_handle_errors
-async def get_project_schedule(group_id: str) -> ScheduleConfig:
-    """
-    Return the project's schedule config (or defaults if in inherit mode).
-
-    Args:
-        group_id (str): Telegram group ID.
-
-    Returns:
-        ScheduleConfig: Active schedule config.
-
-    Raises:
-        HTTPException: 404 if project not found.
-    """
-    # 1. Look up project
-    project = CONTEXT.state_manager.get_project(group_id)
-    if project is None:
-        raise HTTPException(status_code=404, detail=f"Project '{group_id}' not found")
-
-    # 2. Return custom schedule if set, else return ScheduleConfig defaults
-    return project.schedule if project.schedule is not None else ScheduleConfig()
-
-
-@router.put("/settings/{group_id}/schedule", response_model=SettingsResponse)
-@auto_handle_errors
-async def put_project_schedule(group_id: str, body: ScheduleRequest) -> SettingsResponse:
-    """
-    Save or clear a project's schedule config.
-
-    A null body.schedule reverts the project to inheriting the global schedule.
-
-    Args:
-        group_id (str): Telegram group ID.
-        body (ScheduleRequest): New schedule (or null to inherit global).
+        filename (str): Name of the file to delete (e.g. ``python.md``).
 
     Returns:
         SettingsResponse: Success status.
 
     Raises:
-        HTTPException: 404 if project not found.
+        HTTPException: 404 if the file does not exist.
     """
-    # 1. Look up project
-    project = CONTEXT.state_manager.get_project(group_id)
-    if project is None:
-        raise HTTPException(status_code=404, detail=f"Project '{group_id}' not found")
+    # 1. Resolve and validate the target path
+    target = _sources_dir() / filename
+    if not target.exists():
+        raise HTTPException(status_code=404, detail=f"File '{filename}' not found.")
 
-    # 2. Apply schedule (None = inherit global)
-    project.schedule = body.schedule
-    CONTEXT.state_manager.upsert_project(group_id, project)
-
+    # 2. Delete the file
+    target.unlink()
     return SettingsResponse(status="ok")
+
+
+@router.post("/settings/global/coding-rules/combine", response_model=FileContentResponse)
+@auto_handle_errors
+async def combine_rule_files() -> FileContentResponse:
+    """
+    Concatenate all rule source files into CODING_RULES.md.
+
+    Files are joined in alphabetical order, each prefixed with a header
+    indicating the source filename. The result is written to
+    ``rules/CODING_RULES.md`` and returned in the response.
+
+    Returns:
+        FileContentResponse: The combined content that was written.
+
+    Raises:
+        HTTPException: 404 if the sources/ directory contains no .md files.
+    """
+    # 1. Collect source files sorted alphabetically
+    sources = _sources_dir()
+    sources.mkdir(parents=True, exist_ok=True)
+    md_files = sorted(f for f in sources.iterdir() if f.is_file() and f.suffix == ".md")
+
+    if not md_files:
+        raise HTTPException(status_code=404, detail="No rule source files found. Upload at least one .md file first.")
+
+    # 2. Build combined content: header block + each file separated by a divider
+    sections = []
+    for f in md_files:
+        sections.append(f"<!-- Source: {f.name} -->\n{f.read_text()}")
+    combined = "\n\n---\n\n".join(sections)
+
+    # 3. Persist to CODING_RULES.md
+    output = CONTEXT.RUNTIME_CONFIG.PATH_RULES_DIR / "CODING_RULES.md"
+    output.write_text(combined)
+
+    return FileContentResponse(content=combined)

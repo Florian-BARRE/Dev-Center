@@ -76,6 +76,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     git \
+    gosu \
     openssh-client \
     ca-certificates \
     && curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
@@ -83,10 +84,19 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get remove -y curl \
     && apt-get autoremove -y \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
+# gosu: lightweight privilege-drop helper used by entrypoint.sh to fix bind-mount
+# permissions as root and then re-exec as the unprivileged 'app' user.
 
 # Install the Claude Code CLI globally.
 # Required by the bridge manager to spawn `claude remote-control` processes.
 RUN npm install -g @anthropic-ai/claude-code
+
+# Create a non-root user 'app' with a predictable home directory.
+# Claude Code CLI refuses to run --dangerously-skip-permissions as root (UID 0);
+# running as a regular user satisfies this check.
+# The docker-compose.yml already sets HOME=/home/app and mounts ~/.claude there.
+RUN groupadd --gid 1000 app \
+    && useradd --uid 1000 --gid 1000 --create-home --shell /bin/bash app
 
 # /app is the runtime working directory — source code is mounted here.
 WORKDIR /app
@@ -106,6 +116,16 @@ COPY --from=ui-build /workspace/idh-app/frontend/dist /app/idh-app/frontend/dist
 # on Linux when the file was edited on Windows (CRLF → LF).
 COPY idh-app/entrypoint.sh /entrypoint.sh
 RUN sed -i 's/\r$//' /entrypoint.sh && chmod +x /entrypoint.sh
+
+# Transfer ownership of the application directory and venv to the app user.
+# Without this, uvicorn and the bridge subprocesses cannot write to /app
+# (e.g. __pycache__ in dev mode, log files).
+RUN chown -R app:app /app /opt/venv
+
+# NOTE: We do NOT set USER app here. entrypoint.sh runs as root, fixes bind-mount
+# ownership, then uses 'gosu app' to drop privileges before exec'ing uvicorn.
+# This allows the container to repair file ownership on first run regardless of
+# whether the host bind-mount dirs were created by a previous root container.
 
 # Expose port 8000 — the port uvicorn listens on for FastAPI requests.
 EXPOSE 8000

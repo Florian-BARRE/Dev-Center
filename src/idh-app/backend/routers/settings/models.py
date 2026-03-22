@@ -5,7 +5,7 @@
 from pydantic import BaseModel, Field
 
 # ====== Internal Project Imports ======
-from libs.state.models import _CamelModel, ScheduleConfig
+from libs.state.models import _CamelModel
 
 
 class WebhookPayload(BaseModel):
@@ -108,26 +108,25 @@ class ModelResponse(_CamelModel):
     model: str
 
 
-class ContextSizeResponse(BaseModel):
+class RuleFileInfo(_CamelModel):
     """
-    Token count estimates for a project's context files.
+    Metadata for a single uploaded rule source file.
 
     Attributes:
-        total (int): Sum of all component counts.
-        claude_md (int): Estimated tokens in CLAUDE.md.
-        system_prompt (int): Estimated tokens in the Telegram system prompt.
-        session_memory (int): Estimated tokens in SESSION_MEMORY.md.
-        estimated_max (int): Conservative context window size.
+        filename (str): Filename including extension (e.g. ``python.md``).
+        size_bytes (int): File size in bytes.
     """
 
-    total: int
-    claude_md: int
-    system_prompt: int
-    session_memory: int
-    estimated_max: int = 200_000
+    filename: str
+    size_bytes: int
 
 
-class ScheduleRequest(BaseModel):
-    """Request body for PUT /settings/{group_id}/schedule. None resets to inherit."""
+class RuleFilesListResponse(_CamelModel):
+    """
+    Response model listing all uploaded rule source files.
 
-    schedule: ScheduleConfig | None = None
+    Attributes:
+        files (list[RuleFileInfo]): Sorted list of rule source files.
+    """
+
+    files: list[RuleFileInfo]

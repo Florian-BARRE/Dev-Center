@@ -27,7 +27,7 @@ def openclaw_path(tmp_path: pathlib.Path) -> pathlib.Path:
 @pytest.fixture
 def writer(openclaw_path: pathlib.Path) -> OpenClawConfigWriter:
     """Return an OpenClawConfigWriter wired to the temp openclaw.json."""
-    return OpenClawConfigWriter(config_path=openclaw_path, gateway_port=18789)
+    return OpenClawConfigWriter(config_path=openclaw_path, gateway_url="http://localhost:18789")
 
 
 def test_update_agent_system_prompt_persists(
