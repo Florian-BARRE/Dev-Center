@@ -6,9 +6,13 @@ from pathlib import Path
 
 # ====== Third-Party Library Imports ======
 from fastapi import FastAPI
+from fastapi.exception_handlers import http_exception_handler as default_http_exception_handler
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from loggerplusplus import loggerplusplus
+from starlette.exceptions import HTTPException as StarletteHTTPException
+from starlette.requests import Request
 
 # ====== Internal Project Imports ======
 from config import RUNTIME_CONFIG  # MUST be first — registers sys.path
@@ -88,14 +92,26 @@ def _build_app() -> FastAPI:
         debug=CONTEXT.RUNTIME_CONFIG.FASTAPI_DEBUG_MODE,
     )
 
-    # 4. Mount frontend static files only if the dist directory exists
+    # 4. Mount frontend static files and register SPA catch-all handler
     frontend_dir = RUNTIME_CONFIG.PATH_ROOT_DIR_FRONTEND
     if frontend_dir.exists():
+        # Serve the compiled React bundle from the dist/ directory.
+        # html=True makes StaticFiles serve index.html for directory-level paths,
+        # but it still returns 404 for arbitrary client-side routes like /projects/123.
         fastapi_app.mount(
             "/",
             StaticFiles(directory=frontend_dir, html=True),
             name="static",
         )
+
+        # Catch-all: serve index.html for any 404 that is NOT an API call.
+        # This enables React Router client-side navigation on hard refresh or
+        # direct URL access (e.g. navigating directly to /projects/-5104943549).
+        @fastapi_app.exception_handler(StarletteHTTPException)
+        async def spa_fallback(request: Request, exc: StarletteHTTPException) -> FileResponse:
+            if exc.status_code == 404 and not request.url.path.startswith("/api"):
+                return FileResponse(str(frontend_dir / "index.html"))
+            return await default_http_exception_handler(request, exc)
 
     # 5. Add CORS middleware
     fastapi_app.add_middleware(

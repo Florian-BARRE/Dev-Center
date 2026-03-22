@@ -108,7 +108,7 @@ class ModelResponse(_CamelModel):
     model: str
 
 
-class ContextSizeResponse(BaseModel):
+class ContextSizeResponse(_CamelModel):
     """
     Token count estimates for a project's context files.
 
