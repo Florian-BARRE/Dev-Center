@@ -40,29 +40,31 @@ export default function CodeSessionTab({ project, onProjectChange }: CodeSession
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: theme.spacing.lg }}>
-      {/* Secondary sub-tab bar */}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+      {/* Secondary sub-tab bar — pill style */}
       <div style={{
         display: 'flex',
-        gap: '2px',
-        borderBottom: `1px solid ${theme.colors.borderSubtle}`,
-        paddingBottom: '1px',
-        marginBottom: '-1px',
+        gap: '4px',
+        padding: '4px',
+        background: theme.colors.surfaceElevated,
+        border: `1px solid ${theme.colors.border}`,
+        borderRadius: theme.radius.lg,
+        alignSelf: 'flex-start',
       }}>
         {SUB_TABS.map((st) => (
           <button
             key={st.id}
             onClick={() => goTo(st.id)}
             style={{
-              background: 'none',
-              border: 'none',
+              background: activeSubTab === st.id ? theme.colors.accentDim : 'none',
+              border: activeSubTab === st.id ? `1px solid ${theme.colors.accent}33` : '1px solid transparent',
+              borderRadius: theme.radius.md,
               cursor: 'pointer',
-              padding: `${theme.spacing.xs} ${theme.spacing.md}`,
+              padding: '5px 14px',
               fontSize: theme.font.size.sm,
-              fontWeight: activeSubTab === st.id ? theme.font.weight.medium : theme.font.weight.normal,
-              color: activeSubTab === st.id ? theme.colors.text : theme.colors.muted,
-              borderBottom: activeSubTab === st.id ? `2px solid ${theme.colors.primary}` : '2px solid transparent',
-              marginBottom: '-2px',
+              fontFamily: theme.font.sans,
+              fontWeight: activeSubTab === st.id ? theme.font.weight.semibold : theme.font.weight.normal,
+              color: activeSubTab === st.id ? theme.colors.accent : theme.colors.muted,
               transition: theme.transition.fast,
             }}
           >

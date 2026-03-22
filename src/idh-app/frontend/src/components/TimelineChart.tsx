@@ -2,29 +2,29 @@ import { theme } from '../theme';
 import type { TimelineProject } from '../api/types';
 
 const WINDOW_HOURS = 48;
-const ROW_HEIGHT = 36;
+const ROW_HEIGHT = 32;
 
 interface TimelineChartProps {
   projects: TimelineProject[];
 }
 
 function statusColor(status: 'active' | 'scheduled' | 'past'): string {
-  if (status === 'active') return theme.colors.primary;
-  if (status === 'scheduled') return `${theme.colors.primary}4D`;   // 30% opacity
-  return `${theme.colors.muted}33`;                                   // 20% opacity
+  if (status === 'active')    return theme.colors.accent;
+  if (status === 'scheduled') return `${theme.colors.accent}4D`;   // 30% opacity
+  return `${theme.colors.muted}33`;                                  // 20% opacity
 }
 
 export default function TimelineChart({ projects }: TimelineChartProps) {
   if (projects.length === 0) {
     return (
-      <div style={{ padding: theme.spacing.lg, textAlign: 'center', color: theme.colors.muted, fontSize: theme.font.size.sm }}>
+      <div style={{ padding: '16px', textAlign: 'center', color: theme.colors.muted, fontSize: theme.font.size.sm }}>
         No schedule data to display.
       </div>
     );
   }
 
   const now = Date.now();
-  const totalMs = WINDOW_HOURS * 60 * 60 * 1000;
+  const totalMs  = WINDOW_HOURS * 60 * 60 * 1000;
   const leftEdge = now - (WINDOW_HOURS / 2) * 60 * 60 * 1000;
 
   return (
@@ -33,19 +33,20 @@ export default function TimelineChart({ projects }: TimelineChartProps) {
         <div key={proj.groupId} style={{
           display: 'grid',
           gridTemplateColumns: '120px 1fr',
-          gap: theme.spacing.sm,
+          gap: '8px',
           alignItems: 'center',
-          marginBottom: theme.spacing.xs,
+          marginBottom: '6px',
         }}>
           {/* Project label */}
           <span style={{
             fontSize: theme.font.size.xs,
             color: theme.colors.textSecondary,
+            fontFamily: theme.font.mono,
             overflow: 'hidden',
             textOverflow: 'ellipsis',
             whiteSpace: 'nowrap',
             textAlign: 'right',
-            paddingRight: theme.spacing.sm,
+            paddingRight: '8px',
           }}>
             {proj.projectId}
           </span>
@@ -54,7 +55,7 @@ export default function TimelineChart({ projects }: TimelineChartProps) {
           <div style={{
             position: 'relative',
             height: `${ROW_HEIGHT}px`,
-            background: theme.colors.surface,
+            background: theme.colors.surfaceElevated,
             border: `1px solid ${theme.colors.border}`,
             borderRadius: theme.radius.sm,
             overflow: 'hidden',
@@ -92,6 +93,7 @@ export default function TimelineChart({ projects }: TimelineChartProps) {
                   background: statusColor(win.status),
                   borderRadius: '2px',
                   transition: 'background 0.2s',
+                  boxShadow: win.status === 'active' ? `0 0 8px ${theme.colors.accent}44` : 'none',
                 }} />
               );
             })}
@@ -100,10 +102,10 @@ export default function TimelineChart({ projects }: TimelineChartProps) {
       ))}
 
       {/* X-axis label */}
-      <div style={{ paddingLeft: '128px', display: 'flex', justifyContent: 'space-between', marginTop: '2px' }}>
-        <span style={{ fontSize: theme.font.size.xs, color: theme.colors.muted }}>-24h</span>
-        <span style={{ fontSize: theme.font.size.xs, color: theme.colors.warning }}>now</span>
-        <span style={{ fontSize: theme.font.size.xs, color: theme.colors.muted }}>+24h</span>
+      <div style={{ paddingLeft: '128px', display: 'flex', justifyContent: 'space-between', marginTop: '4px' }}>
+        <span style={{ fontSize: theme.font.size.xs, color: theme.colors.muted, fontFamily: theme.font.mono }}>-24h</span>
+        <span style={{ fontSize: theme.font.size.xs, color: theme.colors.warning, fontFamily: theme.font.mono }}>now</span>
+        <span style={{ fontSize: theme.font.size.xs, color: theme.colors.muted, fontFamily: theme.font.mono }}>+24h</span>
       </div>
     </div>
   );

@@ -8,8 +8,8 @@ interface RepoStepProps {
 
 export default function RepoStep({ repoUrl, onChange, onNext }: RepoStepProps) {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: theme.spacing.md }}>
-      <p style={{ color: theme.colors.muted, margin: 0 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+      <p style={{ color: theme.colors.muted, margin: 0, fontSize: theme.font.size.md }}>
         Enter the SSH or HTTPS URL of the Git repository to clone.
       </p>
       <input
@@ -18,30 +18,34 @@ export default function RepoStep({ repoUrl, onChange, onNext }: RepoStepProps) {
         onChange={(e) => onChange(e.target.value)}
         placeholder="git@github.com:user/repo.git"
         style={{
-          background: theme.colors.surface,
+          background: theme.colors.surfaceElevated,
           border: `1px solid ${theme.colors.border}`,
           borderRadius: theme.radius.md,
           color: theme.colors.text,
           fontFamily: theme.font.mono,
           fontSize: theme.font.size.md,
-          padding: theme.spacing.md,
+          padding: '10px 12px',
           width: '100%',
           boxSizing: 'border-box',
+          outline: 'none',
         }}
+        autoFocus
       />
       <button
         onClick={onNext}
         disabled={!repoUrl.trim()}
         style={{
           alignSelf: 'flex-end',
-          padding: `${theme.spacing.sm} ${theme.spacing.xl}`,
-          background: theme.colors.primary,
-          color: theme.colors.onPrimary,
-          border: 'none',
+          padding: '8px 24px',
+          background: repoUrl.trim() ? theme.colors.accent : theme.colors.surfaceElevated,
+          color: repoUrl.trim() ? theme.colors.onPrimary : theme.colors.muted,
+          border: repoUrl.trim() ? 'none' : `1px solid ${theme.colors.border}`,
           borderRadius: theme.radius.md,
           cursor: repoUrl.trim() ? 'pointer' : 'not-allowed',
           fontSize: theme.font.size.md,
-          fontWeight: 600,
+          fontFamily: theme.font.sans,
+          fontWeight: theme.font.weight.semibold,
+          transition: theme.transition.fast,
         }}
       >
         Next →

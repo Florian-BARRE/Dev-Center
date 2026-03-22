@@ -42,12 +42,14 @@ export default function TranscriptSubTab({ project }: TranscriptSubTabProps) {
   }, [project.projectId]);
 
   const toggleStyle = (active: boolean) => ({
-    padding: `${theme.spacing.xs} ${theme.spacing.md}`,
-    background: active ? theme.colors.surfaceElevated : 'none',
-    border: `1px solid ${active ? theme.colors.borderAccent : theme.colors.border}`,
+    padding: '5px 14px',
+    background: active ? theme.colors.accentDim : 'none',
+    border: active ? `1px solid ${theme.colors.accent}33` : `1px solid ${theme.colors.border}`,
     borderRadius: theme.radius.md,
-    color: active ? theme.colors.text : theme.colors.muted,
+    color: active ? theme.colors.accent : theme.colors.muted,
     fontSize: theme.font.size.sm,
+    fontFamily: theme.font.sans,
+    fontWeight: active ? theme.font.weight.semibold : theme.font.weight.normal,
     cursor: 'pointer' as const,
     transition: theme.transition.fast,
   });
@@ -59,9 +61,9 @@ export default function TranscriptSubTab({ project }: TranscriptSubTabProps) {
   const bubbles = parseTranscript(viewMode === 'chat' ? filteredContent : '');
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: theme.spacing.md }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
       {/* Controls */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: theme.spacing.sm }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
         <button onClick={() => setViewMode('raw')} style={toggleStyle(viewMode === 'raw')}>Raw</button>
         <button onClick={() => setViewMode('chat')} style={toggleStyle(viewMode === 'chat')}>Chat</button>
         <input
@@ -69,11 +71,16 @@ export default function TranscriptSubTab({ project }: TranscriptSubTabProps) {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           style={{
-            marginLeft: 'auto', width: '200px',
-            background: theme.colors.bg, border: `1px solid ${theme.colors.border}`,
-            borderRadius: theme.radius.md, color: theme.colors.text,
-            fontSize: theme.font.size.sm, fontFamily: theme.font.mono,
-            padding: `${theme.spacing.xs} ${theme.spacing.sm}`, outline: 'none',
+            marginLeft: 'auto',
+            width: '200px',
+            background: theme.colors.surfaceElevated,
+            border: `1px solid ${theme.colors.border}`,
+            borderRadius: theme.radius.md,
+            color: theme.colors.text,
+            fontSize: theme.font.size.sm,
+            fontFamily: theme.font.mono,
+            padding: '5px 10px',
+            outline: 'none',
           }}
         />
       </div>
@@ -81,11 +88,19 @@ export default function TranscriptSubTab({ project }: TranscriptSubTabProps) {
       {/* Raw view */}
       {viewMode === 'raw' && (
         <div style={{
-          background: theme.colors.terminalBg, border: `1px solid ${theme.colors.border}`,
-          borderRadius: theme.radius.md, padding: theme.spacing.md,
-          height: '450px', overflowY: 'auto',
-          fontFamily: theme.font.mono, fontSize: theme.font.size.xs, lineHeight: 1.6,
-          color: theme.colors.muted, whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+          background: theme.colors.terminalBg,
+          border: `1px solid ${theme.colors.border}`,
+          borderRadius: theme.radius.lg,
+          padding: '14px',
+          height: '450px',
+          overflowY: 'auto',
+          fontFamily: theme.font.mono,
+          fontSize: theme.font.size.xs,
+          lineHeight: 1.7,
+          color: theme.colors.muted,
+          whiteSpace: 'pre-wrap',
+          wordBreak: 'break-word',
+          boxShadow: theme.shadow.card,
         }}>
           {filteredContent || '(No transcript)'}
         </div>
@@ -94,10 +109,16 @@ export default function TranscriptSubTab({ project }: TranscriptSubTabProps) {
       {/* Chat view */}
       {viewMode === 'chat' && (
         <div style={{
-          background: theme.colors.surface, border: `1px solid ${theme.colors.border}`,
-          borderRadius: theme.radius.md, padding: theme.spacing.md,
-          height: '450px', overflowY: 'auto',
-          display: 'flex', flexDirection: 'column', gap: theme.spacing.sm,
+          background: theme.colors.surface,
+          border: `1px solid ${theme.colors.border}`,
+          borderRadius: theme.radius.lg,
+          padding: '14px',
+          height: '450px',
+          overflowY: 'auto',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '8px',
+          boxShadow: theme.shadow.card,
         }}>
           {bubbles.length === 0 && (
             <span style={{ color: theme.colors.muted, fontSize: theme.font.size.sm }}>No transcript available.</span>
@@ -105,7 +126,12 @@ export default function TranscriptSubTab({ project }: TranscriptSubTabProps) {
           {bubbles.map((b, i) => {
             if (b.role === 'other') {
               return (
-                <div key={i} style={{ textAlign: 'center', fontSize: theme.font.size.xs, color: theme.colors.muted, padding: `${theme.spacing.xs} 0` }}>
+                <div key={i} style={{
+                  textAlign: 'center',
+                  fontSize: theme.font.size.xs,
+                  color: theme.colors.muted,
+                  padding: '4px 0',
+                }}>
                   {b.text}
                 </div>
               );
@@ -115,11 +141,12 @@ export default function TranscriptSubTab({ project }: TranscriptSubTabProps) {
               <div key={i} style={{ display: 'flex', justifyContent: isHuman ? 'flex-end' : 'flex-start' }}>
                 <div style={{
                   maxWidth: '75%',
-                  padding: `${theme.spacing.sm} ${theme.spacing.md}`,
+                  padding: '8px 14px',
                   borderRadius: theme.radius.lg,
-                  background: isHuman ? `${theme.colors.primary}22` : theme.colors.surfaceElevated,
-                  border: `1px solid ${isHuman ? theme.colors.primary + '44' : theme.colors.border}`,
+                  background: isHuman ? theme.colors.accentDim : theme.colors.surfaceElevated,
+                  border: `1px solid ${isHuman ? theme.colors.accent + '33' : theme.colors.border}`,
                   fontSize: theme.font.size.sm,
+                  fontFamily: theme.font.sans,
                   color: theme.colors.text,
                   lineHeight: 1.5,
                 }}>

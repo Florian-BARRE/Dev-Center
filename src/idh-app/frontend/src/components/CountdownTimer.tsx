@@ -40,7 +40,7 @@ export default function CountdownTimer({ expiresAt }: CountdownTimerProps) {
           : isWarning
           ? theme.colors.warning
           : theme.colors.text,
-        fontWeight: isWarning || isExpired ? 600 : 400,
+        fontWeight: isWarning || isExpired ? theme.font.weight.semibold : theme.font.weight.normal,
       }}
     >
       {formatRemaining(remaining)}

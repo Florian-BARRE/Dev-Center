@@ -14,6 +14,12 @@ vi.mock('./pages/NewProject/NewProjectPage', () => ({
 vi.mock('./pages/GlobalSettings/SettingsPage', () => ({
   default: () => <div data-testid="settings">Settings</div>,
 }));
+vi.mock('./pages/Monitoring/MonitoringPage', () => ({
+  default: () => <div data-testid="monitoring">Monitoring</div>,
+}));
+vi.mock('./api/projects', () => ({
+  listProjects: vi.fn(() => Promise.resolve({ projects: [] })),
+}));
 
 describe('App router', () => {
   it('renders Dashboard at /', () => {

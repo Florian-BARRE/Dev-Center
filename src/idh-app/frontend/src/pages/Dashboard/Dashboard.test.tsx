@@ -48,11 +48,11 @@ describe('ProjectCard', () => {
 
   it('shows bridge active badge when bridge is running', () => {
     render(<MemoryRouter><ProjectCard project={mockProject} /></MemoryRouter>);
-    expect(screen.getByText('Active')).toBeInTheDocument();
+    expect(screen.getByText('LIVE')).toBeInTheDocument();
   });
 
   it('shows idle badge when no bridge', () => {
     render(<MemoryRouter><ProjectCard project={{ ...mockProject, bridge: null }} /></MemoryRouter>);
-    expect(screen.getByText('Idle')).toBeInTheDocument();
+    expect(screen.getByText('IDLE')).toBeInTheDocument();
   });
 });

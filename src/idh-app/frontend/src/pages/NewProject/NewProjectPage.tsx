@@ -9,11 +9,82 @@ import ConfirmStep from './steps/ConfirmStep';
 
 type Step = 1 | 2 | 3;
 
-const STEP_LABELS: Record<Step, string> = {
-  1: 'Step 1 — Repository',
-  2: 'Step 2 — Model',
-  3: 'Step 3 — Confirm',
-};
+const STEP_META: { label: string; title: string }[] = [
+  { label: '1', title: 'Repository' },
+  { label: '2', title: 'Model' },
+  { label: '3', title: 'Confirm' },
+];
+
+// ── Step indicator ────────────────────────────────────────────────────────────
+
+function StepIndicator({ current }: { current: Step }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', marginBottom: '28px' }}>
+      {STEP_META.map((s, i) => {
+        const stepNum = (i + 1) as Step;
+        const isDone    = current > stepNum;
+        const isActive  = current === stepNum;
+        return (
+          <div key={i} style={{ display: 'flex', alignItems: 'center' }}>
+            {/* Circle */}
+            <div style={{
+              width: '32px', height: '32px',
+              borderRadius: '50%',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              background: isDone
+                ? theme.colors.success
+                : isActive
+                ? theme.colors.accent
+                : theme.colors.surfaceElevated,
+              border: isDone
+                ? `1px solid ${theme.colors.success}`
+                : isActive
+                ? `1px solid ${theme.colors.accent}`
+                : `1px solid ${theme.colors.border}`,
+              color: isDone || isActive ? theme.colors.onPrimary : theme.colors.muted,
+              fontSize: theme.font.size.sm,
+              fontFamily: theme.font.mono,
+              fontWeight: theme.font.weight.semibold,
+              flexShrink: 0,
+              boxShadow: isActive ? theme.shadow.accent : 'none',
+              transition: theme.transition.base,
+            }}>
+              {isDone ? '✓' : s.label}
+            </div>
+
+            {/* Label below the circle — only for active */}
+            <div style={{
+              position: 'absolute',
+              marginTop: '52px',
+              marginLeft: '-20px',
+              width: '70px',
+              textAlign: 'center',
+              fontSize: theme.font.size.xs,
+              fontFamily: theme.font.sans,
+              color: isActive ? theme.colors.text : theme.colors.muted,
+              fontWeight: isActive ? theme.font.weight.semibold : theme.font.weight.normal,
+              pointerEvents: 'none',
+            }}>
+              {s.title}
+            </div>
+
+            {/* Connector line */}
+            {i < STEP_META.length - 1 && (
+              <div style={{
+                width: '60px', height: '1px',
+                background: isDone ? theme.colors.success : theme.colors.border,
+                margin: '0 4px',
+                transition: 'background 0.3s ease',
+              }} />
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ── NewProjectPage ────────────────────────────────────────────────────────────
 
 export default function NewProjectPage() {
   const navigate = useNavigate();
@@ -39,23 +110,80 @@ export default function NewProjectPage() {
   };
 
   return (
-    <div style={{ minHeight: '100vh', background: theme.colors.bg, color: theme.colors.text, fontFamily: theme.font.sans, padding: theme.spacing.xl }}>
+    <div style={{
+      padding: '32px',
+      minHeight: '100vh',
+      animation: 'fadeIn 0.3s ease',
+    }}>
+      {/* Breadcrumb */}
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: '6px',
+        marginBottom: '24px',
+        fontSize: theme.font.size.xs,
+        fontFamily: theme.font.mono,
+        color: theme.colors.muted,
+      }}>
+        <Link to="/" style={{ color: theme.colors.muted, textDecoration: 'none' }}>
+          Dashboard
+        </Link>
+        <span>›</span>
+        <span style={{ color: theme.colors.textSecondary }}>New Project</span>
+      </div>
+
       <div style={{ maxWidth: '560px', margin: '0 auto' }}>
-        <div style={{ marginBottom: theme.spacing.lg }}>
-          <Link to="/" style={{ color: theme.colors.muted, textDecoration: 'none', fontSize: theme.font.size.sm }}>
-            ← Back to Dashboard
-          </Link>
-          <h1 style={{ marginTop: theme.spacing.md, fontSize: theme.font.size.xl, fontFamily: theme.font.mono }}>
+        {/* Header */}
+        <div style={{
+          paddingBottom: '24px',
+          borderBottom: `1px solid ${theme.colors.border}`,
+          marginBottom: '32px',
+        }}>
+          <h1 style={{
+            margin: 0,
+            fontFamily: theme.font.display,
+            fontWeight: theme.font.weight.bold,
+            fontSize: theme.font.size.xl,
+            color: theme.colors.text,
+          }}>
             New Project
           </h1>
-          <div style={{ color: theme.colors.muted, fontSize: theme.font.size.sm }}>
-            {STEP_LABELS[step]}
-          </div>
+          <p style={{ margin: '6px 0 0', fontSize: theme.font.size.sm, color: theme.colors.muted }}>
+            Connect a Git repository to a Telegram coding agent
+          </p>
         </div>
 
-        <div style={{ background: theme.colors.surface, border: `1px solid ${theme.colors.border}`, borderRadius: theme.radius.lg, padding: theme.spacing.lg }}>
+        {/* Step indicator */}
+        <div style={{ position: 'relative', marginBottom: '48px' }}>
+          <StepIndicator current={step} />
+        </div>
+
+        {/* Step card */}
+        <div style={{
+          background: theme.colors.surface,
+          border: `1px solid ${theme.colors.border}`,
+          borderRadius: theme.radius.xl,
+          padding: '24px',
+          boxShadow: theme.shadow.card,
+        }}>
+          {/* Step label */}
+          <div style={{
+            fontSize: theme.font.size.xs,
+            fontFamily: theme.font.mono,
+            color: theme.colors.muted,
+            marginBottom: '16px',
+            textTransform: 'uppercase' as const,
+            letterSpacing: '0.08em',
+          }}>
+            Step {step} of {STEP_META.length} — {STEP_META[step - 1].title}
+          </div>
+
           {step === 1 && (
-            <RepoStep repoUrl={repoUrl} onChange={setRepoUrl} onNext={() => setStep(2)} />
+            <RepoStep
+              repoUrl={repoUrl}
+              onChange={setRepoUrl}
+              onNext={() => setStep(2)}
+            />
           )}
           {step === 2 && (
             <ModelStep

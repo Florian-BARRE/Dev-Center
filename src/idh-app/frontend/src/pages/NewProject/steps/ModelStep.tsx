@@ -11,22 +11,24 @@ interface ModelStepProps {
 
 export default function ModelStep({ provider, model, onChange, onBack, onNext }: ModelStepProps) {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: theme.spacing.md }}>
-      <p style={{ color: theme.colors.muted, margin: 0 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+      <p style={{ color: theme.colors.muted, margin: 0, fontSize: theme.font.size.md }}>
         Choose the AI model for the Telegram coding agent.
       </p>
       <ModelSelector provider={provider} model={model} onChange={onChange} />
-      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '4px' }}>
         <button
           onClick={onBack}
           style={{
-            padding: `${theme.spacing.sm} ${theme.spacing.lg}`,
-            border: `1px solid ${theme.colors.border}`,
+            padding: '8px 20px',
+            border: `1px solid ${theme.colors.borderAccent}`,
             background: 'transparent',
             color: theme.colors.text,
             borderRadius: theme.radius.md,
             cursor: 'pointer',
             fontSize: theme.font.size.md,
+            fontFamily: theme.font.sans,
+            transition: theme.transition.fast,
           }}
         >
           ← Back
@@ -34,14 +36,16 @@ export default function ModelStep({ provider, model, onChange, onBack, onNext }:
         <button
           onClick={onNext}
           style={{
-            padding: `${theme.spacing.sm} ${theme.spacing.lg}`,
-            background: theme.colors.primary,
+            padding: '8px 24px',
+            background: theme.colors.accent,
             color: theme.colors.onPrimary,
             border: 'none',
             borderRadius: theme.radius.md,
             cursor: 'pointer',
             fontSize: theme.font.size.md,
-            fontWeight: 600,
+            fontFamily: theme.font.sans,
+            fontWeight: theme.font.weight.semibold,
+            transition: theme.transition.fast,
           }}
         >
           Next →

@@ -31,32 +31,54 @@ export default function SettingsPage() {
   }, []);
 
   return (
-    <div style={{ padding: theme.spacing.xl }}>
+    <div style={{
+      padding: '32px',
+      animation: 'fadeIn 0.3s ease',
+    }}>
       {/* Page header */}
-      <div style={{ marginBottom: theme.spacing.xl }}>
-        <h1 style={{ margin: 0, fontSize: theme.font.size.xxxl, fontWeight: theme.font.weight.bold, color: theme.colors.text, lineHeight: 1.1 }}>
-          Settings
+      <div style={{
+        paddingBottom: '24px',
+        borderBottom: `1px solid ${theme.colors.border}`,
+        marginBottom: '24px',
+      }}>
+        <h1 style={{
+          margin: 0,
+          fontFamily: theme.font.display,
+          fontWeight: theme.font.weight.bold,
+          fontSize: theme.font.size.xl,
+          color: theme.colors.text,
+          lineHeight: 1.1,
+        }}>
+          Global Settings
         </h1>
-        <p style={{ margin: `${theme.spacing.xs} 0 0`, fontSize: theme.font.size.sm, color: theme.colors.muted }}>
+        <p style={{ margin: '6px 0 0', fontSize: theme.font.size.sm, color: theme.colors.muted }}>
           Global configuration applied to all projects
         </p>
       </div>
 
-      {/* Tabs */}
-      <div style={{ display: 'flex', gap: '2px', borderBottom: `1px solid ${theme.colors.border}`, marginBottom: theme.spacing.xl }}>
+      {/* Tab bar */}
+      <div style={{
+        display: 'flex',
+        gap: '2px',
+        borderBottom: `1px solid ${theme.colors.border}`,
+        marginBottom: '24px',
+      }}>
         {TABS.map((t) => (
           <button
             key={t.id}
             onClick={() => setTab(t.id)}
             style={{
-              background: 'none', border: 'none',
-              color: tab === t.id ? theme.colors.text : theme.colors.muted,
-              fontSize: theme.font.size.sm,
+              background: 'none',
+              border: 'none',
+              color: tab === t.id ? theme.colors.accent : theme.colors.muted,
+              fontSize: theme.font.size.md,
+              fontFamily: theme.font.sans,
               fontWeight: tab === t.id ? theme.font.weight.semibold : theme.font.weight.normal,
               cursor: 'pointer',
-              padding: `${theme.spacing.sm} ${theme.spacing.md}`,
-              borderBottom: tab === t.id ? `2px solid ${theme.colors.primary}` : '2px solid transparent',
-              marginBottom: '-1px', transition: theme.transition.fast,
+              padding: '8px 16px',
+              borderBottom: tab === t.id ? `2px solid ${theme.colors.accent}` : '2px solid transparent',
+              marginBottom: '-1px',
+              transition: theme.transition.fast,
             }}
           >
             {t.label}
@@ -69,12 +91,22 @@ export default function SettingsPage() {
         {TABS.find((t) => t.id === tab)?.description}
       </p>
 
+      {/* Error */}
       {error && (
-        <div style={{ padding: `${theme.spacing.sm} ${theme.spacing.md}`, background: theme.colors.dangerBg, border: `1px solid ${theme.colors.danger}44`, borderRadius: theme.radius.sm, color: theme.colors.danger, fontSize: theme.font.size.sm, marginBottom: theme.spacing.lg }}>
+        <div style={{
+          padding: '8px 12px',
+          background: theme.colors.dangerBg,
+          border: `1px solid ${theme.colors.danger}44`,
+          borderRadius: theme.radius.sm,
+          color: theme.colors.danger,
+          fontSize: theme.font.size.sm,
+          marginBottom: '16px',
+        }}>
           {error}
         </div>
       )}
 
+      {/* Tab content */}
       {tab === 'coding-rules'   && codingRules !== null && <CodingRulesEditor initialContent={codingRules} />}
       {tab === 'coding-rules'   && codingRules === null && !error && (
         <div style={{ color: theme.colors.muted, fontSize: theme.font.size.sm }}>Loading…</div>

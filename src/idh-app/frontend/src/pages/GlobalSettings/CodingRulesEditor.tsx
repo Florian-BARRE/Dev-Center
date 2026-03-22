@@ -28,28 +28,42 @@ export default function CodingRulesEditor({ initialContent }: CodingRulesEditorP
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: theme.spacing.md }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <h2 style={{ margin: 0, fontSize: theme.font.size.lg, fontFamily: theme.font.mono }}>
+        <h2 style={{
+          margin: 0,
+          fontSize: theme.font.size.md,
+          fontFamily: theme.font.mono,
+          color: theme.colors.textSecondary,
+          fontWeight: theme.font.weight.medium,
+        }}>
           CODING_RULES.md
         </h2>
         <button
           onClick={handleSave}
           disabled={saving}
           style={{
-            padding: `${theme.spacing.sm} ${theme.spacing.lg}`,
-            background: saved ? theme.colors.primary : theme.colors.surface,
-            color: saved ? theme.colors.onPrimary : theme.colors.text,
-            border: `1px solid ${saved ? theme.colors.primary : theme.colors.border}`,
+            padding: '6px 16px',
+            background: saved ? theme.colors.success : theme.colors.accent,
+            color: theme.colors.onPrimary,
+            border: 'none',
             borderRadius: theme.radius.md,
             cursor: saving ? 'not-allowed' : 'pointer',
-            fontSize: theme.font.size.md,
+            fontSize: theme.font.size.sm,
+            fontFamily: theme.font.sans,
+            fontWeight: theme.font.weight.semibold,
+            opacity: saving ? 0.6 : 1,
+            transition: theme.transition.fast,
           }}
         >
           {saving ? 'Saving...' : saved ? '✓ Saved' : 'Save'}
         </button>
       </div>
-      {error && <div style={{ color: theme.colors.danger, fontSize: theme.font.size.sm }}>{error}</div>}
+      {error && (
+        <div style={{ color: theme.colors.danger, fontSize: theme.font.size.sm }}>
+          {error}
+        </div>
+      )}
       <MarkdownEditor value={content} onChange={setContent} minHeight="400px" />
     </div>
   );

@@ -56,36 +56,36 @@ export default function ScheduleEditor({ value, onChange }: ScheduleEditorProps)
     color: theme.colors.text,
     fontFamily: theme.font.mono,
     fontSize: theme.font.size.sm,
-    padding: `${theme.spacing.xs} ${theme.spacing.sm}`,
+    padding: '4px 8px',
     outline: 'none',
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: theme.spacing.md }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
 
       {/* Enabled toggle */}
-      <label style={{ display: 'flex', alignItems: 'center', gap: theme.spacing.sm, cursor: 'pointer' }}>
+      <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer' }}>
         <input
           type="checkbox"
           aria-label="Schedule enabled"
           checked={value.enabled}
           onChange={(e) => onChange({ ...value, enabled: e.target.checked })}
         />
-        <span style={{ fontSize: theme.font.size.sm, color: theme.colors.text }}>
+        <span style={{ fontSize: theme.font.size.sm, color: theme.colors.text, fontFamily: theme.font.sans }}>
           Schedule enabled
         </span>
       </label>
 
       {/* Window list */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: theme.spacing.sm }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
         {value.windows.map((win, idx) => (
           <div key={idx} style={{
             display: 'flex',
             alignItems: 'center',
-            gap: theme.spacing.sm,
+            gap: '8px',
             flexWrap: 'wrap',
-            padding: theme.spacing.sm,
-            background: theme.colors.surface,
+            padding: '10px',
+            background: theme.colors.surfaceElevated,
             border: `1px solid ${theme.colors.border}`,
             borderRadius: theme.radius.md,
           }}>
@@ -105,7 +105,7 @@ export default function ScheduleEditor({ value, onChange }: ScheduleEditorProps)
             />
 
             {/* Day pills */}
-            <div style={{ display: 'flex', gap: '3px', marginLeft: theme.spacing.xs }}>
+            <div style={{ display: 'flex', gap: '3px', marginLeft: '4px' }}>
               {DAYS.map((day) => (
                 <button
                   key={day}
@@ -114,10 +114,11 @@ export default function ScheduleEditor({ value, onChange }: ScheduleEditorProps)
                     width: '26px',
                     height: '26px',
                     borderRadius: theme.radius.sm,
-                    border: `1px solid ${win.days.includes(day) ? theme.colors.primary : theme.colors.border}`,
-                    background: win.days.includes(day) ? `${theme.colors.primary}22` : 'none',
-                    color: win.days.includes(day) ? theme.colors.primary : theme.colors.muted,
+                    border: `1px solid ${win.days.includes(day) ? theme.colors.accent : theme.colors.border}`,
+                    background: win.days.includes(day) ? theme.colors.accentDim : 'none',
+                    color: win.days.includes(day) ? theme.colors.accent : theme.colors.muted,
                     fontSize: theme.font.size.xs,
+                    fontFamily: theme.font.mono,
                     fontWeight: theme.font.weight.medium,
                     cursor: 'pointer',
                     transition: theme.transition.fast,
@@ -138,9 +139,10 @@ export default function ScheduleEditor({ value, onChange }: ScheduleEditorProps)
                 border: 'none',
                 color: theme.colors.muted,
                 cursor: 'pointer',
-                fontSize: '16px',
+                fontSize: '18px',
                 lineHeight: 1,
                 padding: '2px 4px',
+                transition: theme.transition.fast,
               }}
             >
               ×
@@ -157,46 +159,65 @@ export default function ScheduleEditor({ value, onChange }: ScheduleEditorProps)
           alignSelf: 'flex-start',
           display: 'inline-flex',
           alignItems: 'center',
-          gap: theme.spacing.xs,
-          padding: `${theme.spacing.xs} ${theme.spacing.md}`,
+          gap: '6px',
+          padding: '5px 14px',
           background: 'none',
           border: `1px dashed ${theme.colors.border}`,
           borderRadius: theme.radius.md,
           color: theme.colors.muted,
           fontSize: theme.font.size.sm,
+          fontFamily: theme.font.sans,
           cursor: 'pointer',
+          transition: theme.transition.fast,
         }}
       >
         + Add window
       </button>
 
       {/* Warning sliders */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: theme.spacing.sm }}>
-        <label style={{ fontSize: theme.font.size.sm, color: theme.colors.text }}>
-          Warn me <strong>{value.warnLeadMinutes}</strong> min before end
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+        <label style={{ fontSize: theme.font.size.sm, color: theme.colors.text, fontFamily: theme.font.sans }}>
+          Warn me{' '}
+          <span style={{ fontFamily: theme.font.mono, color: theme.colors.accent, fontWeight: theme.font.weight.semibold }}>
+            {value.warnLeadMinutes}
+          </span>
+          {' '}min before end
           <input
             type="range"
             min={15} max={180} step={15}
             value={value.warnLeadMinutes}
             onChange={(e) => onChange({ ...value, warnLeadMinutes: Number(e.target.value) })}
-            style={{ display: 'block', width: '100%', marginTop: '4px', accentColor: theme.colors.primary }}
+            style={{ display: 'block', width: '100%', marginTop: '6px', accentColor: theme.colors.accent }}
           />
         </label>
-        <label style={{ fontSize: theme.font.size.sm, color: theme.colors.text }}>
-          Repeat every <strong>{value.warnIntervalMinutes}</strong> min
+        <label style={{ fontSize: theme.font.size.sm, color: theme.colors.text, fontFamily: theme.font.sans }}>
+          Repeat every{' '}
+          <span style={{ fontFamily: theme.font.mono, color: theme.colors.accent, fontWeight: theme.font.weight.semibold }}>
+            {value.warnIntervalMinutes}
+          </span>
+          {' '}min
           <input
             type="range"
             min={5} max={60} step={5}
             value={value.warnIntervalMinutes}
             onChange={(e) => onChange({ ...value, warnIntervalMinutes: Number(e.target.value) })}
-            style={{ display: 'block', width: '100%', marginTop: '4px', accentColor: theme.colors.primary }}
+            style={{ display: 'block', width: '100%', marginTop: '6px', accentColor: theme.colors.accent }}
           />
         </label>
       </div>
 
       {/* Alert template */}
       <div>
-        <label style={{ fontSize: theme.font.size.xs, color: theme.colors.muted, textTransform: 'uppercase', letterSpacing: '0.06em', display: 'block', marginBottom: '4px' }}>
+        <label style={{
+          fontSize: '10px',
+          color: theme.colors.muted,
+          textTransform: 'uppercase',
+          letterSpacing: '0.1em',
+          fontFamily: theme.font.sans,
+          fontWeight: theme.font.weight.semibold,
+          display: 'block',
+          marginBottom: '5px',
+        }}>
           Alert message template
         </label>
         <textarea
@@ -211,7 +232,7 @@ export default function ScheduleEditor({ value, onChange }: ScheduleEditorProps)
             color: theme.colors.text,
             fontFamily: theme.font.mono,
             fontSize: theme.font.size.sm,
-            padding: theme.spacing.sm,
+            padding: '8px 10px',
             resize: 'vertical',
             boxSizing: 'border-box',
             outline: 'none',

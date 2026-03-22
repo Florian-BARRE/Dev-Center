@@ -1,30 +1,43 @@
 import { theme } from './theme';
 
 describe('theme tokens', () => {
-  it('has cta token (orange) not accent-as-orange', () => {
-    expect(theme.colors.cta).toBe('#F97316');
-    expect(theme.colors.ctaHover).toBe('#EA6C0A');
+  it('has accent token (electric cyan)', () => {
+    expect(theme.colors.accent).toBe('#3ddcff');
   });
 
-  it('has accent token (purple)', () => {
-    expect(theme.colors.accent).toBe('#8B5CF6');
-    expect(theme.colors.accentHover).toBe('#7C3AED');
+  it('has primary as alias for accent', () => {
+    expect(theme.colors.primary).toBe('#3ddcff');
   });
 
-  it('has new border tokens', () => {
-    expect(theme.colors.borderSubtle).toBe('#161B22');
-    expect(theme.colors.borderAccent).toBe('#30363D');
+  it('has border tokens', () => {
+    expect(theme.colors.border).toBe('#1e1e3a');
+    expect(theme.colors.borderAccent).toBe('#2d2d55');
   });
 
-  it('has updated primary color', () => {
-    expect(theme.colors.primary).toBe('#2F81F7');
-  });
-
-  it('has textSecondary token', () => {
-    expect(theme.colors.textSecondary).toBe('#8B949E');
+  it('has text color tokens', () => {
+    expect(theme.colors.text).toBe('#e0e0f5');
+    expect(theme.colors.textSecondary).toBe('#8888aa');
   });
 
   it('has JetBrains Mono in font.mono', () => {
     expect(theme.font.mono).toContain('JetBrains Mono');
+  });
+
+  it('has Syne in font.display', () => {
+    expect(theme.font.display).toContain('Syne');
+  });
+
+  it('has Figtree in font.sans', () => {
+    expect(theme.font.sans).toContain('Figtree');
+  });
+
+  it('has semantic color tokens', () => {
+    expect(theme.colors.success).toBe('#22ddaa');
+    expect(theme.colors.warning).toBe('#ffb340');
+    expect(theme.colors.danger).toBe('#ff4070');
+  });
+
+  it('has onPrimary as dark bg for text on accent', () => {
+    expect(theme.colors.onPrimary).toBe('#060610');
   });
 });

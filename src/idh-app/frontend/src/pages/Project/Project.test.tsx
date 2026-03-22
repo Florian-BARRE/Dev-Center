@@ -65,7 +65,7 @@ describe('ProjectPage', () => {
     renderWithRoute();
     await waitFor(() => screen.getByRole('button', { name: /overview/i }));
     fireEvent.click(screen.getByRole('button', { name: /overview/i }));
-    expect(screen.getByText(/git@github\.com/)).toBeInTheDocument();
+    expect(screen.getAllByText(/git@github\.com/).length).toBeGreaterThan(0);
   });
 
   it('Telegram tab shows model selector', async () => {

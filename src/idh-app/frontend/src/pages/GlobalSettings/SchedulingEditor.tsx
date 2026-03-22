@@ -36,26 +36,48 @@ export default function SchedulingEditor() {
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: theme.spacing.lg, maxWidth: '640px' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', maxWidth: '640px' }}>
       {error && (
-        <div style={{ padding: `${theme.spacing.sm} ${theme.spacing.md}`, background: theme.colors.dangerBg, border: `1px solid ${theme.colors.danger}44`, borderRadius: theme.radius.sm, color: theme.colors.danger, fontSize: theme.font.size.sm }}>
+        <div style={{
+          padding: '8px 12px',
+          background: theme.colors.dangerBg,
+          border: `1px solid ${theme.colors.danger}44`,
+          borderRadius: theme.radius.sm,
+          color: theme.colors.danger,
+          fontSize: theme.font.size.sm,
+        }}>
           {error}
         </div>
       )}
 
-      <div style={{ background: theme.colors.surface, border: `1px solid ${theme.colors.border}`, borderRadius: theme.radius.lg, padding: theme.spacing.lg }}>
+      <div style={{
+        background: theme.colors.surface,
+        border: `1px solid ${theme.colors.border}`,
+        borderRadius: theme.radius.lg,
+        padding: '16px',
+        boxShadow: theme.shadow.card,
+      }}>
         <ScheduleEditor value={config} onChange={setConfig} />
       </div>
 
       <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-        <button onClick={save} disabled={saving} style={{
-          padding: `${theme.spacing.sm} ${theme.spacing.lg}`,
-          background: saved ? theme.colors.success : theme.colors.primary,
-          border: 'none', borderRadius: theme.radius.md, color: theme.colors.onPrimary,
-          fontSize: theme.font.size.sm, fontWeight: theme.font.weight.semibold,
-          cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.6 : 1,
-          transition: theme.transition.fast,
-        }}>
+        <button
+          onClick={save}
+          disabled={saving}
+          style={{
+            padding: '8px 20px',
+            background: saved ? theme.colors.success : theme.colors.accent,
+            border: 'none',
+            borderRadius: theme.radius.md,
+            color: theme.colors.onPrimary,
+            fontSize: theme.font.size.md,
+            fontFamily: theme.font.sans,
+            fontWeight: theme.font.weight.semibold,
+            cursor: saving ? 'not-allowed' : 'pointer',
+            opacity: saving ? 0.6 : 1,
+            transition: theme.transition.fast,
+          }}
+        >
           {saving ? 'Saving…' : saved ? '✓ Saved' : 'Save Scheduling'}
         </button>
       </div>
