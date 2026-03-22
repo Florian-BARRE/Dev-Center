@@ -5,6 +5,7 @@ import ModelSelector from '../../../components/ModelSelector';
 import MarkdownEditor from '../../../components/MarkdownEditor';
 import { getModel, putModel, getTelegramPrompt, putTelegramPrompt } from '../../../api/settings';
 import { getSessionMemory, putSessionMemory } from '../../../api/memory';
+import { ApiError } from '../../../api/client';
 import { MODEL_OPTIONS } from '../../../api/types';
 import type { Project } from '../../../api/types';
 
@@ -100,10 +101,16 @@ export default function TelegramTab({ project }: TelegramTabProps) {
 
   useEffect(() => {
     let cancelled = false;
+    // SESSION_MEMORY.md may not exist yet — treat 404 as empty string
+    const sessionMemoryOrEmpty = getSessionMemory(project.projectId).catch((e) => {
+      if (e instanceof ApiError && e.status === 404) return { projectId: project.projectId, content: '' };
+      throw e;
+    });
+
     Promise.all([
       getModel(project.groupId),
       getTelegramPrompt(project.groupId),
-      getSessionMemory(project.projectId),
+      sessionMemoryOrEmpty,
     ]).then(([m, t, s]) => {
       if (cancelled) return;
       setProvider(m.provider); setModel(m.model);
