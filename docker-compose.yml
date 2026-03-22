@@ -68,16 +68,20 @@ services:
       - ${IDH_DATA_ROOT}/workspaces:/workspaces
       # IDH state file — idh-app is sole writer (spec Section 1.7)
       - ${IDH_DATA_ROOT}/state:/data
-      # Coding rules and context templates — read-only
-      - ${IDH_DATA_ROOT}/rules:/rules:ro
+      # Coding rules and context templates — read-write (idh-app writes CODING_RULES.md, COMMON_CONTEXT.md)
+      - ${IDH_DATA_ROOT}/rules:/rules
       # OpenClaw config dir — idh-app is sole writer of openclaw.json
       - ${IDH_DATA_ROOT}/config:/openclaw-config
-      # Claude Code OAuth for remote-control bridge
-      - ~/.claude:/home/app/.claude:ro
-      # Codex OAuth for Codex API auto-summary calls
-      - ~/.codex:/home/app/.codex:ro
-      # SSH key for git clone/fetch via SSH
-      - ~/.ssh:/home/app/.ssh:ro
+      # Claude Code OAuth for remote-control bridge.
+      # Read-write — claude remote-control refreshes tokens during a session.
+      - ~/.claude:/home/app/.claude
+      - ~/.claude.json:/home/app/.claude.json
+      # Codex OAuth for Codex API auto-summary calls.
+      # Read-write — codex may refresh its token during summarisation calls.
+      - ~/.codex:/home/app/.codex
+      # SSH key for git clone/fetch via SSH.
+      # Host path is controlled by SSH_KEY_PATH in services/common/.env (default: ~/.ssh).
+      - ${SSH_KEY_PATH:-~/.ssh}:/home/app/.ssh:ro
     networks:
       - idh-net
     depends_on:
