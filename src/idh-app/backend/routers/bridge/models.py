@@ -30,3 +30,14 @@ class BridgeActionResponse(BaseModel):
     """
 
     status: str
+
+
+class AutoRenewRequest(BaseModel):
+    """
+    Request body for toggling auto-renew on an active bridge.
+
+    Attributes:
+        auto_renew (bool): New auto-renew state.
+    """
+
+    auto_renew: bool
