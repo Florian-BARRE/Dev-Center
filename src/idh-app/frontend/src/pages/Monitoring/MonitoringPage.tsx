@@ -9,6 +9,7 @@ import StatusBadge from '../../components/StatusBadge';
 import CountdownTimer from '../../components/CountdownTimer';
 import TimelineChart from '../../components/TimelineChart';
 import ActivityFeed from '../../components/ActivityFeed';
+import EventFeed from '../../components/EventFeed';
 
 // ── Stat card ─────────────────────────────────────────────────────────────────
 
@@ -377,6 +378,11 @@ export default function MonitoringPage() {
       {/* 4. Activity Log */}
       <Section title="Activity Log">
         <ActivityFeed entries={activityEntries} />
+      </Section>
+
+      {/* 5. Live Event Feed */}
+      <Section title="Live Events">
+        <EventFeed />
       </Section>
     </div>
   );
