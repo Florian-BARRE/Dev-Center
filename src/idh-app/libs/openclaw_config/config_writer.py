@@ -143,3 +143,38 @@ class OpenClawConfigWriter(LoggerClass):
         config = self.read_config()
         agents = config.get("agents", {})
         return agents.get(agent_id, {}).get("system_prompt", "")
+
+    def get_agent_model(self, agent_id: str) -> tuple[str, str]:
+        """
+        Read the provider and model for an agent from openclaw.json.
+
+        Args:
+            agent_id (str): OpenClaw agent identifier.
+
+        Returns:
+            tuple[str, str]: ``(provider, model)`` — both empty strings if unset.
+        """
+        # 1. Load config under filelock and extract model fields (empty strings if key absent)
+        config = self.read_config()
+        agent_model = config.get("agents", {}).get(agent_id, {}).get("model", {})
+        return agent_model.get("provider", ""), agent_model.get("model", "")
+
+    def update_agent_model(self, agent_id: str, provider: str, model: str) -> None:
+        """
+        Set the provider and model for an agent in openclaw.json.
+
+        Args:
+            agent_id (str): The agent identifier key in the ``agents`` dict.
+            provider (str): AI provider slug (e.g. ``"anthropic"``).
+            model (str): Model identifier (e.g. ``"claude-sonnet-4-6"``).
+        """
+        # 1. Load config, update model block atomically under filelock, persist
+        with self._lock:
+            data = self._read()
+            if "agents" not in data:
+                data["agents"] = {}
+            if agent_id not in data["agents"]:
+                data["agents"][agent_id] = {}
+            data["agents"][agent_id]["model"] = {"provider": provider, "model": model}
+            self._write(data)
+            self.logger.info(f"Updated model for agent '{agent_id}' to {provider}/{model}")

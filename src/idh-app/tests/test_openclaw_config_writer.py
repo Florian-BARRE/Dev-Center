@@ -103,3 +103,55 @@ def test_update_agent_system_prompt_updates_existing_agent(
 
     raw = json.loads(openclaw_path.read_text())
     assert raw["agents"]["agent-1"]["system_prompt"] == "Updated prompt"
+
+
+def test_update_agent_model_persists(
+    writer: OpenClawConfigWriter, openclaw_path: pathlib.Path
+) -> None:
+    """update_agent_model writes provider and model into openclaw.json."""
+    writer.update_agent_model("agent-1", "anthropic", "claude-sonnet-4-6")
+
+    raw = json.loads(openclaw_path.read_text())
+    assert raw["agents"]["agent-1"]["model"]["provider"] == "anthropic"
+    assert raw["agents"]["agent-1"]["model"]["model"] == "claude-sonnet-4-6"
+
+
+def test_update_agent_model_preserves_system_prompt(
+    writer: OpenClawConfigWriter, openclaw_path: pathlib.Path
+) -> None:
+    """update_agent_model does not overwrite the agent's system_prompt."""
+    writer.update_agent_system_prompt("agent-1", "Be helpful.")
+    writer.update_agent_model("agent-1", "anthropic", "claude-opus-4-6")
+
+    raw = json.loads(openclaw_path.read_text())
+    assert raw["agents"]["agent-1"]["system_prompt"] == "Be helpful."
+    assert raw["agents"]["agent-1"]["model"]["provider"] == "anthropic"
+
+
+def test_get_agent_model_returns_empty_strings_when_unset(
+    writer: OpenClawConfigWriter,
+) -> None:
+    """get_agent_model returns ('', '') for unknown agent."""
+    provider, model = writer.get_agent_model("nonexistent")
+    assert provider == ""
+    assert model == ""
+
+
+def test_get_agent_model_returns_set_values(
+    writer: OpenClawConfigWriter,
+) -> None:
+    """get_agent_model returns the values written by update_agent_model."""
+    writer.update_agent_model("agent-1", "anthropic", "claude-haiku-4-5")
+    provider, model = writer.get_agent_model("agent-1")
+    assert provider == "anthropic"
+    assert model == "claude-haiku-4-5"
+
+
+def test_get_agent_model_returns_empty_strings_for_agent_without_model_key(
+    writer: OpenClawConfigWriter, openclaw_path: pathlib.Path
+) -> None:
+    """get_agent_model returns ('', '') for an agent that exists but has no model key."""
+    writer.update_agent_system_prompt("agent-1", "Some prompt")  # agent exists, no model key
+    provider, model = writer.get_agent_model("agent-1")
+    assert provider == ""
+    assert model == ""
