@@ -44,6 +44,7 @@ env = [
     "LOGGING_LPP_FORMAT=ShortFormat",
     "CODEX_DIR=/tmp/idh-test-codex",
     "CLAUDE_DIR=/tmp/idh-test-claude",
+    "TELEGRAM_BOT_TOKEN=",
 ]
 
 [tool.ruff.lint]

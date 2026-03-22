@@ -59,6 +59,7 @@ class RUNTIME_CONFIG(EnvConfigLoader):
     IDH_WEBHOOK_SECRET = env("IDH_WEBHOOK_SECRET")
     BRIDGE_TTL_HOURS = env("BRIDGE_TTL_HOURS", cast=int, default=8)
     OPENCLAW_GATEWAY_PORT = env("OPENCLAW_GATEWAY_PORT", cast=int, default=18789)
+    TELEGRAM_BOT_TOKEN = env("TELEGRAM_BOT_TOKEN", required=False, default="")
 
     # ───── Runtime data paths ─────
     PATH_DATA_DIR = pathlib.Path(env("DATA_DIR", default="/data"))
