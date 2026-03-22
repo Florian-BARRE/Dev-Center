@@ -16,44 +16,67 @@
 
 | Current location | Item | New location |
 |---|---|---|
-| TelegramTab | Model selector | TelegramTab (unchanged) — becomes **Telegram model** only |
+| TelegramTab | Model selector | TelegramTab — becomes **Telegram model** only (new endpoint) |
 | TelegramTab | SESSION_MEMORY.md editor | CodeSessionTab — read-only viewer |
 | (missing) | Coding rules upload → CLAUDE.md | CodeSessionTab |
 | Overview | Bridge start/stop/status | CodeSessionTab |
 | Overview | Schedule settings | CodeSessionTab |
 | Overview | Bridge expiry / PID | CodeSessionTab |
-| Monitoring | Static activity feed | Monitoring — live WebSocket feed |
+| Monitoring | Static activity feed | Monitoring — live WebSocket feed replaces polling |
 
-### Terminology rename
+### Terminology rename (UI labels only — no backend field renames)
 
-`bridge` → `code session` / `session` everywhere in the UI. Backend field names (`bridge`, `bridgeManager`, etc.) are **not** renamed — only display labels and TypeScript API wrappers change.
+`bridge` → `code session` / `session` in all display labels and TypeScript variable names introduced in this feature. Existing backend field names (`bridge`, `bridgeManager`, `bridge_manager`) are left unchanged.
+
+### Existing component removed
+
+`FilesSubTab` (currently part of the Code Session tab) is **replaced** by the new `CodingRulesEditor`. The existing `PUT /api/v1/settings/{group_id}/claude-md` endpoint is reused by the new component — this is the canonical CLAUDE.md write path. The memory router's `PUT /api/v1/memory/{project_id}` endpoint writes `SESSION_MEMORY.md`, not CLAUDE.md — these are two different files (see Section 3).
 
 ---
 
-## 2. Telegram Tab
+## 2. Two Distinct Models
+
+The project has two independent model configurations:
+
+| | **Telegram model** | **Code Session model** |
+|---|---|---|
+| Used by | OpenClaw Telegram agent | Claude Code bridge process |
+| Stored in | `openclaw.json` per agent | `state.json` as `model_override` per project |
+| Existing endpoint | **None — new** | `GET/PUT /api/v1/settings/{group_id}/model` |
+| New endpoint | `GET/PUT /api/v1/settings/{group_id}/telegram-model` | (unchanged) |
+
+Both return `{provider, model}` but they are independent — changing one does not affect the other.
+
+---
+
+## 3. Telegram Tab
 
 ### Content
 
-| Element | Source | R/W |
-|---|---|---|
-| Provider selector | `GET/PUT /api/v1/settings/{group_id}/telegram-model` | R/W |
-| Model selector | same endpoint | R/W |
-| System prompt editor | `GET/PUT /api/v1/settings/{group_id}/telegram-prompt` | R/W |
-| Context size meter | `GET /api/v1/settings/{group_id}/context-size` | R |
-| Group ID | `project.groupId` | R |
+| Element | Source | Path param | R/W |
+|---|---|---|---|
+| Provider + model selector | `GET/PUT /api/v1/settings/{group_id}/telegram-model` | `groupId` | R/W |
+| System prompt editor | `GET/PUT /api/v1/settings/{group_id}/telegram-prompt` | `groupId` | R/W |
+| Context size meter | `GET /api/v1/settings/{group_id}/context-size` | `groupId` | R |
+| Group ID | `project.groupId` (local) | — | R |
+
+### Group ID display
+
+Read-only text field showing `project.groupId`. No dedicated component needed — inline in the tab layout.
 
 ### Backend — new Telegram model endpoint
 
 **`OpenClawConfigWriter`** — two new methods:
+
 ```python
 def get_agent_model(self, agent_id: str) -> tuple[str, str]:
-    """Return (provider, model) for the agent. Empty strings if unset."""
+    """Return (provider, model) for the agent. Returns ('', '') if unset."""
 
 def update_agent_model(self, agent_id: str, provider: str, model: str) -> None:
-    """Set provider and model for the agent in openclaw.json (atomic)."""
+    """Set provider and model for the agent in openclaw.json (atomic, under filelock)."""
 ```
 
-`openclaw.json` agent structure becomes:
+`openclaw.json` agent structure after this change:
 ```json
 {
   "agents": {
@@ -65,13 +88,10 @@ def update_agent_model(self, agent_id: str, provider: str, model: str) -> None:
 }
 ```
 
-**New routes** in `settings/router.py`:
-```
-GET  /api/v1/settings/{group_id}/telegram-model  → TelegramModelResponse(provider, model)
-PUT  /api/v1/settings/{group_id}/telegram-model  → SettingsResponse
-```
+Existing agents without the `"model"` key are handled gracefully — `get_agent_model` returns `('', '')` when the key is absent. No migration script required.
 
 **New Pydantic models** in `settings/models.py`:
+
 ```python
 class TelegramModelResponse(_CamelModel):
     provider: str
@@ -82,55 +102,84 @@ class TelegramModelRequest(_CamelModel):
     model: str
 ```
 
+Note: `TelegramModelResponse` is structurally identical to `ModelResponse` but is kept separate to make the conceptual distinction explicit at the API layer.
+
+**New routes** in `settings/router.py`:
+
+```
+GET  /api/v1/settings/{group_id}/telegram-model  → TelegramModelResponse
+PUT  /api/v1/settings/{group_id}/telegram-model  → SettingsResponse
+```
+
+Both decorated with `@auto_handle_errors`. The PUT route calls `openclaw_writer.update_agent_model(agent_id, body.provider, body.model)` where `agent_id == project.project_id` (existing convention).
+
 ---
 
-## 3. Code Session Tab
+## 4. Code Session Tab
 
 ### Content
 
-| Element | Source | R/W |
-|---|---|---|
-| Provider + model selector | `GET/PUT /api/v1/settings/{group_id}/model` | R/W |
-| Session state (running/stopped) | `project.bridge` | R |
-| PID | `project.bridge.pid` | R |
-| Expiry countdown | `project.bridge.expiresAt` | R (live countdown) |
-| Start / Stop buttons | `POST /api/v1/bridge/{group_id}/start|stop` | W |
-| Schedule editor | `GET/PUT /api/v1/settings/{group_id}/schedule` | R/W |
-| Relaunch config (message, warning duration) | part of `ScheduleConfig` | R/W |
-| Coding rules upload → CLAUDE.md | `GET/PUT /api/v1/memory/{project_id}` | R/W |
-| SESSION_MEMORY.md viewer | `GET /api/v1/memory/{project_id}/session` | R (polling 10s) |
+| Element | Source | Path param | R/W |
+|---|---|---|---|
+| Provider + model selector | `GET/PUT /api/v1/settings/{group_id}/model` | `groupId` | R/W |
+| Session state (running/stopped) | `project.bridge` | — | R |
+| PID | `project.bridge.pid` | — | R |
+| Expiry countdown | `project.bridge.expiresAt` | — | R (live countdown) |
+| Start / Stop buttons | `POST /api/v1/bridge/{group_id}/start|stop` | `groupId` | W |
+| Schedule editor | `GET/PUT /api/v1/settings/{group_id}/schedule` | `groupId` | R/W |
+| Coding rules upload → CLAUDE.md | `GET/PUT /api/v1/settings/{group_id}/claude-md` | `groupId` | R/W |
+| SESSION_MEMORY.md viewer | `GET /api/v1/memory/{project_id}/session-memory` | `projectId` | R (polling 10s) |
 
-### Coding rules upload behaviour (frontend only, no new endpoint)
+Note: `groupId` maps to `project.groupId`, `projectId` maps to `project.projectId`.
+
+### Coding rules upload behaviour (frontend only — no new endpoint)
 
 1. User selects N `.md` files via `<input type="file" multiple>`.
 2. Files are read with `FileReader`, sorted alphabetically by filename.
-3. Contents are concatenated with `\n\n---\n\n` separators.
-4. Result is injected into the CLAUDE.md textarea (user can edit before saving).
-5. Save button calls `PUT /api/v1/memory/{project_id}` with the textarea content.
+3. Contents are concatenated with `\n\n---\n\n` separators and a `# <filename>` heading before each file.
+4. Result is injected into the CLAUDE.md textarea (user can still edit manually before saving).
+5. Save button calls `PUT /api/v1/settings/{group_id}/claude-md` with the textarea content.
 
 ### SESSION_MEMORY.md viewer
 
-- Read-only `<pre>` / `MarkdownPreview` component.
-- Polls `GET /api/v1/memory/{project_id}/session` every 10 seconds.
-- Shows "No session memory yet" placeholder on 404.
-- Last-updated timestamp shown below.
+- Read-only `<pre>` block (monospace, scrollable, max-height 300px).
+- Polls `GET /api/v1/memory/{project_id}/session-memory` every 10 seconds.
+- On HTTP 404: shows "No session memory yet" placeholder (file does not exist until first session ends).
+- Shows "Last updated: <timestamp>" below the viewer, updated on each successful poll.
 
 ---
 
-## 4. Monitoring Tab — WebSocket Event Feed
+## 5. Monitoring Tab — WebSocket Event Feed
 
 ### Backend — EventBus
 
-New class `libs/event_bus/event_bus.py`:
+New class at `libs/event_bus/event_bus.py`:
+
 ```python
 class EventBus:
-    """Asyncio-based pub/sub for broadcasting real-time events to WebSocket clients."""
+    """
+    Asyncio pub/sub bus for broadcasting real-time events to WebSocket clients.
 
-    async def publish(self, event_type: str, payload: dict) -> None: ...
-    async def subscribe(self) -> AsyncGenerator[dict, None]: ...
+    Internally maintains a list of asyncio.Queue instances — one per connected
+    subscriber. publish() puts a copy of the event into every queue. subscribe()
+    yields from the caller's dedicated queue and removes it on cancellation/close.
+    """
+
+    def __init__(self) -> None:
+        self._queues: list[asyncio.Queue] = []
+
+    async def publish(self, event_type: str, payload: dict, group_id: str | None = None) -> None:
+        """Enqueue an event to all active subscribers."""
+
+    async def subscribe(self) -> AsyncGenerator[dict, None]:
+        """
+        Yield events as they arrive.
+        The generator adds a queue on entry and removes it on exit (finally block),
+        preventing memory leaks on client disconnect.
+        """
 ```
 
-Injected into `CONTEXT.event_bus`.
+Instantiated once in `entrypoint.py` and injected as `CONTEXT.event_bus`.
 
 ### Event schema
 
@@ -143,16 +192,16 @@ Injected into `CONTEXT.event_bus`.
 }
 ```
 
-Event types emitted:
+### Event types
 
-| Type | Emitted by | Payload |
+| Type | Emitted by | Payload fields |
 |---|---|---|
 | `session.started` | BridgeManager | `pid`, `workspace`, `expires_at` |
-| `session.stopped` | BridgeManager | `group_id` |
-| `session.expired` | BridgeManager watchdog | `group_id` |
+| `session.stopped` | BridgeManager | — |
+| `session.expired` | BridgeManager watchdog | — |
 | `session.renewed` | BridgeManager | `pid`, `expires_at` |
-| `scheduler.tick` | SchedulerService | `active_projects` count |
-| `scheduler.warning_sent` | SchedulerService | `group_id`, `remaining_minutes` |
+| `scheduler.tick` | SchedulerService | `active_projects` (count) |
+| `scheduler.warning_sent` | SchedulerService | `remaining_minutes` |
 | `summarizer.started` | CodexSummarizer | `project_id` |
 | `summarizer.completed` | CodexSummarizer | `project_id`, `output_length` |
 | `memory.updated` | MemoryManager | `project_id`, `file` (`CLAUDE.md` or `SESSION_MEMORY.md`) |
@@ -160,65 +209,77 @@ Event types emitted:
 
 ### WebSocket endpoint
 
-New router `backend/routers/monitoring/router.py`:
+New router at `backend/routers/monitoring/router.py` (existing file — add to it):
+
 ```
 WS /api/v1/monitoring/ws
 ```
 
-- On connect: subscribe to `EventBus`.
-- Stream events as JSON to the client.
-- On disconnect: clean up subscription.
+**Note on `@auto_handle_errors`:** WebSocket routes cannot use `@auto_handle_errors` (the decorator raises `HTTPException` which is meaningless after the HTTP upgrade). Instead, the WebSocket handler wraps the event loop in a `try/except`, logs errors via `CONTEXT.logger.error`, and closes the connection cleanly on unexpected exceptions.
+
+**Note on `response_model`:** WebSocket routes have no HTTP response body — `response_model` is not applicable. This is the only exception to the project-wide rule.
+
+Connection lifecycle:
+1. Client connects → subscribe to `EventBus`.
+2. Stream events as JSON strings until client disconnects or an error occurs.
+3. On `WebSocketDisconnect` or any exception: `finally` block unsubscribes from `EventBus` (queue is removed, preventing memory leak).
 
 ### Frontend — EventFeed component
 
+Location: `src/components/EventFeed.tsx`
+
 - Connects to `ws(s)://<host>/api/v1/monitoring/ws` on mount.
-- Displays events in a scrollable list, newest at top.
-- Each row: timestamp, coloured badge for event type, group_id (if present), payload summary.
-- Auto-reconnect on disconnect (exponential backoff, max 30s).
-- "Clear" button to wipe displayed events.
+- Displays events in a scrollable list, newest at top, max 200 entries retained in state.
+- Each row: timestamp, coloured badge for event type (colour map defined in component), `group_id` if present, payload key/value summary.
+- Auto-reconnect on disconnect with exponential backoff (1s → 2s → 4s → … → 30s max). Reconnect logic lives entirely in `EventFeed` — `createMonitoringSocket()` simply returns a fresh `WebSocket`.
+- "Clear" button wipes displayed events without disconnecting.
+- Existing polling functions (`getTimeline`, `getActivityLog`) in `monitoring.ts` are **retained** — `TimelineChart` and the project status table on `MonitoringPage` continue to use them. `EventFeed` is added alongside, not replacing, these components.
 
 ---
 
-## 5. Frontend Component Tree
+## 6. Frontend Component Tree
 
 ```
 ProjectPage
-├── OverviewTab          (unchanged)
-├── TelegramTab          (refactored)
-│   ├── TelegramModelSelector   (new — uses telegram-model endpoint)
-│   ├── SystemPromptEditor      (existing, moved)
-│   ├── ContextSizeMeter        (existing, unchanged)
-│   └── GroupInfoCard           (new — shows groupId)
-├── CodeSessionTab       (refactored from existing tabs)
-│   ├── SessionModelSelector    (existing ModelSelector, uses /model endpoint)
-│   ├── SessionStatusCard       (state, PID, expiry countdown, start/stop)
-│   ├── ScheduleEditor          (existing, moved here)
-│   ├── CodingRulesEditor       (new — file upload + CLAUDE.md textarea)
-│   └── SessionMemoryViewer     (new — read-only, polling)
+├── OverviewTab              (unchanged)
+├── TelegramTab              (refactored)
+│   ├── TelegramModelSelector  (new — telegram-model endpoint)
+│   ├── SystemPromptEditor     (existing, moved)
+│   ├── ContextSizeMeter       (existing, unchanged)
+│   └── GroupInfoCard          (new — read-only display of groupId)
+├── CodeSessionTab           (refactored)
+│   ├── SessionModelSelector   (existing ModelSelector — /model endpoint)
+│   ├── SessionStatusCard      (state, PID, expiry countdown, start/stop)
+│   ├── ScheduleEditor         (existing, moved here from Overview)
+│   ├── CodingRulesEditor      (new — file upload + CLAUDE.md textarea)
+│   └── SessionMemoryViewer    (new — read-only, polling 10s)
 └── MonitoringPage
-    └── EventFeed               (new — WebSocket)
+    ├── TimelineChart          (existing, unchanged)
+    ├── ProjectStatusTable     (existing, unchanged)
+    └── EventFeed              (new — WebSocket live feed)
 ```
 
 ---
 
-## 6. API Layer Changes (Frontend)
+## 7. API Layer Changes (Frontend)
 
-New functions in `src/api/settings.ts`:
+**`src/api/settings.ts`** — add:
 ```typescript
 getTelegramModel(groupId: string): Promise<{ provider: string; model: string }>
 putTelegramModel(groupId: string, provider: string, model: string): Promise<void>
 ```
 
-New file `src/api/monitoring.ts`:
+**`src/api/monitoring.ts`** — add alongside existing functions:
 ```typescript
-createMonitoringSocket(): WebSocket   // returns connected WS, caller manages lifecycle
+createMonitoringSocket(): WebSocket  // caller owns lifecycle; EventFeed handles reconnect
 ```
 
 ---
 
-## 7. Out of Scope
+## 8. Out of Scope
 
 - Renaming backend field names (`bridge`, `bridgeManager`) — display labels only
 - Group name from Telegram — not stored, not displayed
 - Telegram conversation transcript / agent session memory — deferred
 - Authentication on WebSocket endpoint
+- `openclaw.json` migration tooling — graceful defaults handle missing `"model"` keys
