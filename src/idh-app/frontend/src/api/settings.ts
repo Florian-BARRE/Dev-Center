@@ -1,5 +1,5 @@
 import { apiFetch } from './client';
-import type { FileContentResponse, FileWriteResponse, TelegramPromptResponse, ModelResponse, ContextSizeResponse, ScheduleConfig, GlobalDefaults } from './types';
+import type { FileContentResponse, FileWriteResponse, TelegramPromptResponse, ModelResponse, TelegramModelResponse, ContextSizeResponse, ScheduleConfig, GlobalDefaults } from './types';
 
 // Global settings
 export function getGlobalCodingRules(): Promise<FileContentResponse> {
@@ -53,6 +53,17 @@ export function getModel(groupId: string): Promise<ModelResponse> {
 
 export function putModel(groupId: string, provider: string, model: string): Promise<FileWriteResponse> {
   return apiFetch(`/api/v1/settings/${groupId}/model`, {
+    method: 'PUT',
+    body: JSON.stringify({ provider, model }),
+  });
+}
+
+export function getTelegramModel(groupId: string): Promise<TelegramModelResponse> {
+  return apiFetch(`/api/v1/settings/${groupId}/telegram-model`, { method: 'GET' });
+}
+
+export function putTelegramModel(groupId: string, provider: string, model: string): Promise<FileWriteResponse> {
+  return apiFetch(`/api/v1/settings/${groupId}/telegram-model`, {
     method: 'PUT',
     body: JSON.stringify({ provider, model }),
   });

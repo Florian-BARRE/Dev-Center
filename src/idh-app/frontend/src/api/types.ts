@@ -69,6 +69,11 @@ export interface ModelResponse {
   model: string;
 }
 
+export interface TelegramModelResponse {
+  provider: string;
+  model: string;
+}
+
 // Known provider/model combinations
 export const MODEL_OPTIONS: { provider: string; model: string; label: string }[] = [
   { provider: 'openai-codex', model: 'gpt-5.3-codex',    label: 'Codex gpt-5.3' },
