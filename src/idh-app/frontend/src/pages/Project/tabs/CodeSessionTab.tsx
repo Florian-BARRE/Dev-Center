@@ -9,6 +9,7 @@ import { getModel, putModel, getClaudeMd, putClaudeMd, getProjectSchedule, putPr
 import { getSessionMemory } from '../../../api/memory';
 import type { ScheduleConfig } from '../../../api/types';
 import { startBridge, stopBridge } from '../../../api/bridge';
+import { getProject } from '../../../api/projects';
 import { ApiError } from '../../../api/client';
 import { MODEL_OPTIONS } from '../../../api/types';
 import type { Project } from '../../../api/types';
@@ -131,7 +132,6 @@ export default function CodeSessionTab({ project, onProjectChange }: CodeSession
     try {
       await startBridge(project.groupId);
       // Reload project so bridge state is fresh
-      const { getProject } = await import('../../../api/projects');
       const updated = await getProject(project.groupId);
       onProjectChange(updated);
     } catch (e) { setError(e instanceof Error ? e.message : 'Start failed'); }
@@ -142,7 +142,6 @@ export default function CodeSessionTab({ project, onProjectChange }: CodeSession
     setActionBusy(true); setError(null);
     try {
       await stopBridge(project.groupId);
-      const { getProject } = await import('../../../api/projects');
       const updated = await getProject(project.groupId);
       onProjectChange(updated);
     } catch (e) { setError(e instanceof Error ? e.message : 'Stop failed'); }

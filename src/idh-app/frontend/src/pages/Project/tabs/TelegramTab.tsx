@@ -82,8 +82,8 @@ function SaveButton({ id, saving, onClick }: { id: string; saving: string | null
 // ── TelegramTab ───────────────────────────────────────────────────────────────
 
 export default function TelegramTab({ project }: TelegramTabProps) {
-  const [provider, setProvider] = useState(project.modelOverride?.provider ?? MODEL_OPTIONS[0].provider);
-  const [model, setModel] = useState(project.modelOverride?.model ?? MODEL_OPTIONS[0].model);
+  const [provider, setProvider] = useState(MODEL_OPTIONS[0].provider);
+  const [model, setModel] = useState(MODEL_OPTIONS[0].model);
   const [telegramPrompt, setTelegramPrompt] = useState('');
   const [agentId, setAgentId] = useState('');
   const [contextSize, setContextSize] = useState<ContextSizeResponse | null>(null);
