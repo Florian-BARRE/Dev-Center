@@ -10,7 +10,6 @@ dependencies = [
     "filelock>=3.16.0",
     "pyfiglet>=0.8.post1",
     "httpx>=0.27.0",
-    "python-multipart>=0.0.22",
 ]
 
 [dependency-groups]
@@ -45,6 +44,7 @@ env = [
     "LOGGING_LPP_FORMAT=ShortFormat",
     "CODEX_DIR=/tmp/idh-test-codex",
     "CLAUDE_DIR=/tmp/idh-test-claude",
+    "TELEGRAM_BOT_TOKEN=",
 ]
 
 [tool.ruff.lint]

@@ -13,23 +13,27 @@ class MemoryManager(LoggerClass):
     """
     Manages per-project memory files.
 
-    All files live under ``<workspaces_dir>/<project_id>/``:
-    - ``CLAUDE.md``          — project context injected into every Claude session.
-    - ``SESSION_MEMORY.md``  — running session memory written by the agent.
-    - ``*.jsonl``            — Claude Code transcript files.
+    CLAUDE.md files live at ``<claude_dir>/projects/<project_id>/CLAUDE.md``
+    and are used to provide project context to Claude agents.
+
+    SESSION_MEMORY.md and JSONL transcript files live at
+    ``<workspaces_dir>/<project_id>/``.
 
     Attributes:
+        _claude_dir (pathlib.Path): Root Claude configuration directory.
         _workspaces_dir (pathlib.Path): Root workspaces directory.
     """
 
-    def __init__(self, workspaces_dir: pathlib.Path) -> None:
+    def __init__(self, claude_dir: pathlib.Path, workspaces_dir: pathlib.Path) -> None:
         """
         Initialise the MemoryManager.
 
         Args:
+            claude_dir (pathlib.Path): Path to the Claude config directory.
             workspaces_dir (pathlib.Path): Path to the workspaces root directory.
         """
         LoggerClass.__init__(self)
+        self._claude_dir = claude_dir
         self._workspaces_dir = workspaces_dir
 
     # ──────────────────────────── Private helpers ────────────────────────────
@@ -38,16 +42,13 @@ class MemoryManager(LoggerClass):
         """
         Resolve the CLAUDE.md path for a given project.
 
-        CLAUDE.md lives at the root of the project workspace so Claude Code
-        picks it up automatically when it starts in that directory.
-
         Args:
             project_id (str): Project identifier.
 
         Returns:
             pathlib.Path: Full path to the project's CLAUDE.md file.
         """
-        return self._workspaces_dir / project_id / "CLAUDE.md"
+        return self._claude_dir / "projects" / project_id / "CLAUDE.md"
 
     # ──────────────────────────── Public API ────────────────────────────────
 

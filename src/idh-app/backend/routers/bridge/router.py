@@ -10,7 +10,7 @@ from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
 # ====== Internal Project Imports ======
 from backend.context import CONTEXT
 from backend.libs.utils.error_handling import auto_handle_errors
-from .models import BridgeActionResponse, BridgeStatusResponse
+from .models import AutoRenewRequest, BridgeActionResponse, BridgeStatusResponse
 
 router = APIRouter(tags=["bridge"])
 
@@ -121,6 +121,41 @@ async def renew_bridge(group_id: str) -> BridgeActionResponse:
     return BridgeActionResponse(status="renewed")
 
 
+@router.put("/bridge/{group_id}/auto-renew", response_model=BridgeActionResponse)
+@auto_handle_errors
+async def set_auto_renew(group_id: str, body: AutoRenewRequest) -> BridgeActionResponse:
+    """
+    Toggle the auto-renew flag on an active bridge.
+
+    Args:
+        group_id (str): Telegram group ID.
+        body (AutoRenewRequest): New auto_renew state.
+
+    Returns:
+        BridgeActionResponse: Success status.
+
+    Raises:
+        HTTPException: 404 if project not found.
+        HTTPException: 400 if no bridge is currently active.
+    """
+    # 1. Look up the project
+    project = CONTEXT.state_manager.get_project(group_id)
+    if project is None:
+        raise HTTPException(status_code=404, detail=f"Project '{group_id}' not found")
+
+    # 2. Require an active bridge to set auto-renew
+    if project.bridge is None:
+        raise HTTPException(status_code=400, detail="No active bridge — start one first")
+
+    # 3. Update the flag and persist
+    project.bridge.auto_renew = body.auto_renew
+    CONTEXT.state_manager.upsert_project(group_id, project)
+
+    return BridgeActionResponse(
+        status="auto_renew_on" if body.auto_renew else "auto_renew_off"
+    )
+
+
 @router.websocket("/bridge/{group_id}/logs")
 async def bridge_logs_ws(websocket: WebSocket, group_id: str) -> None:
     """
@@ -135,15 +170,18 @@ async def bridge_logs_ws(websocket: WebSocket, group_id: str) -> None:
     """
     await websocket.accept()
     try:
-        # Stream log lines — tail_logs replays history then polls for live output.
-        # It exits naturally when the bridge process is stopped or expires.
+        # 1. Verify the project has an active bridge
+        project = CONTEXT.state_manager.get_project(group_id)
+        if project is None or project.bridge is None:
+            await websocket.send_text(f"No active bridge for group '{group_id}'.")
+            await websocket.close()
+            return
+
+        # 2. Stream logs line by line from the bridge manager
         async for line in CONTEXT.bridge_manager.tail_logs(group_id):
             await websocket.send_text(line)
 
     except WebSocketDisconnect:
         pass
     finally:
-        try:
-            await websocket.close()
-        except Exception:
-            pass
+        await websocket.close()

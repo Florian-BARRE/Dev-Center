@@ -58,10 +58,8 @@ class RUNTIME_CONFIG(EnvConfigLoader):
     # ───── IDH ─────
     IDH_WEBHOOK_SECRET = env("IDH_WEBHOOK_SECRET")
     BRIDGE_TTL_HOURS = env("BRIDGE_TTL_HOURS", cast=int, default=8)
-    # Full base URL of the OpenClaw gateway reachable from inside the container.
-    # In Docker Compose this is http://openclaw-gateway:18789 (service name on idh-net).
-    # Defaults to http://localhost:18789 for local dev runs outside Docker.
-    OPENCLAW_GATEWAY_URL = env("OPENCLAW_GATEWAY_URL", default="http://localhost:18789")
+    OPENCLAW_GATEWAY_PORT = env("OPENCLAW_GATEWAY_PORT", cast=int, default=18789)
+    TELEGRAM_BOT_TOKEN = env("TELEGRAM_BOT_TOKEN", required=False, default="")
 
     # ───── Runtime data paths ─────
     PATH_DATA_DIR = pathlib.Path(env("DATA_DIR", default="/data"))
