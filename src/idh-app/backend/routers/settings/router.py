@@ -18,6 +18,8 @@ from .models import ContextSizeResponse, FileContentResponse, FileWriteRequest, 
 
 router = APIRouter(tags=["settings"])
 
+_CHARS_PER_TOKEN = 4  # simple heuristic
+
 
 def _verify_signature(body: bytes, signature: str) -> bool:
     """
@@ -37,6 +39,21 @@ def _verify_signature(body: bytes, signature: str) -> bool:
     # 2. Compare constant-time to prevent timing attacks
     return hmac.compare_digest(expected, signature)
 
+
+def _estimate_tokens(text: str) -> int:
+    """
+    Estimate token count using a 4-chars-per-token heuristic.
+
+    Args:
+        text (str): Input text to estimate.
+
+    Returns:
+        int: Estimated token count (non-negative).
+    """
+    return max(0, len(text) // _CHARS_PER_TOKEN)
+
+
+# ─── Non-parameterized routes ────────────────────────────────────────────────
 
 @router.post("/settings/webhook", response_model=SettingsResponse)
 @auto_handle_errors
@@ -125,30 +142,7 @@ async def put_telegram_prompt(
     return SettingsResponse(status="ok")
 
 
-@router.put("/settings/{group_id}/model", response_model=SettingsResponse)
-@auto_handle_errors
-async def put_model(group_id: str, body: ModelUpdateRequest) -> SettingsResponse:
-    """
-    Update the model override for a project (called from /agent wizard).
-
-    Args:
-        group_id (str): Telegram group ID.
-        body (ModelUpdateRequest): New provider and model.
-
-    Returns:
-        SettingsResponse: Success status.
-
-    Raises:
-        HTTPException: 404 if the project does not exist.
-    """
-    # 1. Atomically read-modify-write the model override (raises 404 if missing)
-    CONTEXT.state_manager.set_model_override(
-        group_id,
-        ModelOverride(provider=body.provider, model=body.model),
-    )
-
-    return SettingsResponse(status="ok")
-
+# ─── /settings/global/* routes ───────────────────────────────────────────────
 
 @router.get("/settings/global/coding-rules", response_model=FileContentResponse)
 @auto_handle_errors
@@ -288,6 +282,8 @@ async def put_global_scheduling(body: ScheduleConfig) -> SettingsResponse:
     return SettingsResponse(status="ok")
 
 
+# ─── /settings/{group_id}/* routes ───────────────────────────────────────────
+
 @router.get("/settings/{group_id}/claude-md", response_model=FileContentResponse)
 @auto_handle_errors
 async def get_project_claude_md(group_id: str) -> FileContentResponse:
@@ -394,20 +390,29 @@ async def get_model(group_id: str) -> ModelResponse:
     return ModelResponse(provider="", model="")
 
 
-_CHARS_PER_TOKEN = 4  # simple heuristic
-
-
-def _estimate_tokens(text: str) -> int:
+@router.put("/settings/{group_id}/model", response_model=SettingsResponse)
+@auto_handle_errors
+async def put_model(group_id: str, body: ModelUpdateRequest) -> SettingsResponse:
     """
-    Estimate token count using a 4-chars-per-token heuristic.
+    Update the model override for a project (called from /agent wizard).
 
     Args:
-        text (str): Input text to estimate.
+        group_id (str): Telegram group ID.
+        body (ModelUpdateRequest): New provider and model.
 
     Returns:
-        int: Estimated token count (non-negative).
+        SettingsResponse: Success status.
+
+    Raises:
+        HTTPException: 404 if the project does not exist.
     """
-    return max(0, len(text) // _CHARS_PER_TOKEN)
+    # 1. Atomically read-modify-write the model override (raises 404 if missing)
+    CONTEXT.state_manager.set_model_override(
+        group_id,
+        ModelOverride(provider=body.provider, model=body.model),
+    )
+
+    return SettingsResponse(status="ok")
 
 
 @router.get("/settings/{group_id}/context-size", response_model=ContextSizeResponse)
