@@ -442,9 +442,9 @@ async def get_context_size(group_id: str) -> ContextSizeResponse:
     # 3. Read system prompt via openclaw_writer (agent_id == project_id by convention)
     system_prompt_text = CONTEXT.openclaw_writer.get_agent_system_prompt(project.project_id)
 
-    # 4. Read SESSION_MEMORY.md via memory_manager
+    # 4. Read SESSION_MEMORY.md via memory_manager (returns None when missing)
     try:
-        session_memory_text = CONTEXT.memory_manager.read_memory(project.project_id)
+        session_memory_text = CONTEXT.memory_manager.read_memory(project.project_id) or ""
     except Exception:
         session_memory_text = ""
 
