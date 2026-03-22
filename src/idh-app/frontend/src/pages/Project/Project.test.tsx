@@ -18,8 +18,9 @@ const mockProject: Project = {
   groupId: '-1001234567890',
   projectId: 'my-project',
   repoUrl: 'git@github.com:u/r.git',
-  bridge: { pid: 42, workspace: '/ws/my-project', expiresAt: new Date(Date.now() + 3600000).toISOString() },
+  bridge: { pid: 42, workspace: '/ws/my-project', expiresAt: new Date(Date.now() + 3600000).toISOString(), autoRenew: false },
   modelOverride: { provider: 'anthropic', model: 'claude-sonnet-4-6' },
+  schedule: null,
 };
 
 function renderWithRoute(groupId = '-1001234567890') {
@@ -38,20 +39,27 @@ describe('ProjectPage', () => {
     vi.mocked(settingsApi.getModel).mockResolvedValue({ provider: 'anthropic', model: 'claude-sonnet-4-6' });
     vi.mocked(settingsApi.getTelegramPrompt).mockResolvedValue({ agentId: 'my-project', systemPrompt: '' });
     vi.mocked(settingsApi.getClaudeMd).mockResolvedValue({ content: '# CLAUDE' });
+    vi.mocked(settingsApi.getContextSize).mockResolvedValue({
+      total: 10000, claudeMd: 5000, systemPrompt: 3000, sessionMemory: 2000, estimatedMax: 200000,
+    });
   });
 
   it('shows project ID in the heading', async () => {
     renderWithRoute();
-    await waitFor(() => expect(screen.getByText('my-project')).toBeInTheDocument());
+    // The project name appears in both the page heading and the OverviewTab card.
+    // Use getAllByText to tolerate multiple matches, then assert at least one exists.
+    await waitFor(() => expect(screen.getAllByText('my-project').length).toBeGreaterThanOrEqual(1));
   });
 
   it('renders 4 tabs', async () => {
     renderWithRoute();
+    // Match tab labels exactly to avoid collisions with action buttons in tab content
+    // (e.g. "Stop Bridge" in OverviewTab would also match /bridge/i).
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: /overview/i })).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: /bridge/i })).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: /memory/i })).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: /settings/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Overview' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Bridge' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Memory' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Settings' })).toBeInTheDocument();
     });
   });
 
