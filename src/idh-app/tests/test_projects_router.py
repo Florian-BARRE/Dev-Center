@@ -137,6 +137,13 @@ def test_create_project(client: TestClient, tmp_path: pathlib.Path) -> None:
     # Mock openclaw_writer.register_group and reload
     CONTEXT.openclaw_writer.register_group = MagicMock()
     CONTEXT.openclaw_writer.reload = AsyncMock()
+    CONTEXT.openclaw_writer.update_agent_system_prompt = MagicMock()
+
+    # Mock global_config_manager.get_defaults to return defaults with no custom prompt
+    CONTEXT.global_config_manager = MagicMock()
+    CONTEXT.global_config_manager.get_defaults = MagicMock(
+        return_value=MagicMock(default_telegram_prompt=None)
+    )
 
     response = client.post("/api/v1/projects/", json={
         "groupId": "-100111",

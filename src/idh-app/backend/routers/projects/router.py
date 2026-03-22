@@ -127,12 +127,19 @@ async def create_project(body: CreateProjectRequest) -> ProjectResponse:
     )
     await CONTEXT.openclaw_writer.reload()
 
-    # 6. Start the coding bridge for the new workspace
+    # 6. Load global defaults and apply the default system prompt if set
+    global_defaults = CONTEXT.global_config_manager.get_defaults()
+    if global_defaults.default_telegram_prompt:
+        CONTEXT.openclaw_writer.update_agent_system_prompt(
+            project_id, global_defaults.default_telegram_prompt
+        )
+
+    # 7. Start the coding bridge for the new workspace
     await CONTEXT.bridge_manager.start_bridge(
         group_id=body.group_id, workspace=workspace
     )
 
-    # 7. Build the project with model override from the wizard
+    # 8. Build the project with model override from the wizard
     project = Project(
         group_id=body.group_id,
         project_id=project_id,
@@ -140,7 +147,7 @@ async def create_project(body: CreateProjectRequest) -> ProjectResponse:
         model_override=ModelOverride(provider=body.provider, model=body.model),
     )
 
-    # 8. Persist to state file
+    # 9. Persist to state file
     CONTEXT.state_manager.upsert_project(body.group_id, project)
 
     return ProjectResponse(**project.model_dump())
