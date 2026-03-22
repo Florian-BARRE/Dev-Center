@@ -5,7 +5,7 @@
 from pydantic import BaseModel, Field
 
 # ====== Internal Project Imports ======
-from libs.state.models import _CamelModel
+from libs.state.models import _CamelModel, ScheduleConfig
 
 
 class WebhookPayload(BaseModel):
@@ -106,3 +106,28 @@ class ModelResponse(_CamelModel):
 
     provider: str
     model: str
+
+
+class ContextSizeResponse(BaseModel):
+    """
+    Token count estimates for a project's context files.
+
+    Attributes:
+        total (int): Sum of all component counts.
+        claude_md (int): Estimated tokens in CLAUDE.md.
+        system_prompt (int): Estimated tokens in the Telegram system prompt.
+        session_memory (int): Estimated tokens in SESSION_MEMORY.md.
+        estimated_max (int): Conservative context window size.
+    """
+
+    total: int
+    claude_md: int
+    system_prompt: int
+    session_memory: int
+    estimated_max: int = 200_000
+
+
+class ScheduleRequest(BaseModel):
+    """Request body for PUT /settings/{group_id}/schedule. None resets to inherit."""
+
+    schedule: ScheduleConfig | None = None

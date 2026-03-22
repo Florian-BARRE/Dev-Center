@@ -13,8 +13,8 @@ from fastapi import APIRouter, Header, HTTPException, Request
 # ====== Internal Project Imports ======
 from backend.context import CONTEXT
 from backend.libs.utils.error_handling import auto_handle_errors
-from libs.state.models import ModelOverride, Project
-from .models import FileContentResponse, FileWriteRequest, ModelResponse, ModelUpdateRequest, SettingsResponse, TelegramPromptRequest, TelegramPromptResponse, WebhookPayload
+from libs.state.models import GlobalDefaults, ModelOverride, Project, ScheduleConfig
+from .models import ContextSizeResponse, FileContentResponse, FileWriteRequest, ModelResponse, ModelUpdateRequest, ScheduleRequest, SettingsResponse, TelegramPromptRequest, TelegramPromptResponse, WebhookPayload
 
 router = APIRouter(tags=["settings"])
 
@@ -230,6 +230,64 @@ async def put_global_common_context(body: FileWriteRequest) -> SettingsResponse:
     return SettingsResponse(status="ok")
 
 
+@router.get("/settings/global/defaults", response_model=GlobalDefaults)
+@auto_handle_errors
+async def get_global_defaults() -> GlobalDefaults:
+    """
+    Return global project defaults.
+
+    Returns:
+        GlobalDefaults: Current global defaults.
+    """
+    return CONTEXT.global_config_manager.get_defaults()
+
+
+@router.put("/settings/global/defaults", response_model=SettingsResponse)
+@auto_handle_errors
+async def put_global_defaults(body: GlobalDefaults) -> SettingsResponse:
+    """
+    Save global project defaults.
+
+    Args:
+        body (GlobalDefaults): New global defaults.
+
+    Returns:
+        SettingsResponse: Success status.
+    """
+    # 1. Delegate to global config manager
+    CONTEXT.global_config_manager.save_defaults(body)
+    return SettingsResponse(status="ok")
+
+
+@router.get("/settings/global/scheduling", response_model=ScheduleConfig)
+@auto_handle_errors
+async def get_global_scheduling() -> ScheduleConfig:
+    """
+    Return global schedule config.
+
+    Returns:
+        ScheduleConfig: Current global schedule.
+    """
+    return CONTEXT.global_config_manager.get_schedule()
+
+
+@router.put("/settings/global/scheduling", response_model=SettingsResponse)
+@auto_handle_errors
+async def put_global_scheduling(body: ScheduleConfig) -> SettingsResponse:
+    """
+    Save global schedule config.
+
+    Args:
+        body (ScheduleConfig): New global schedule.
+
+    Returns:
+        SettingsResponse: Success status.
+    """
+    # 1. Delegate to global config manager
+    CONTEXT.global_config_manager.save_schedule(body)
+    return SettingsResponse(status="ok")
+
+
 @router.get("/settings/{group_id}/claude-md", response_model=FileContentResponse)
 @auto_handle_errors
 async def get_project_claude_md(group_id: str) -> FileContentResponse:
@@ -334,3 +392,120 @@ async def get_model(group_id: str) -> ModelResponse:
     if project.model_override:
         return ModelResponse(provider=project.model_override.provider, model=project.model_override.model)
     return ModelResponse(provider="", model="")
+
+
+_CHARS_PER_TOKEN = 4  # simple heuristic
+
+
+def _estimate_tokens(text: str) -> int:
+    """
+    Estimate token count using a 4-chars-per-token heuristic.
+
+    Args:
+        text (str): Input text to estimate.
+
+    Returns:
+        int: Estimated token count (non-negative).
+    """
+    return max(0, len(text) // _CHARS_PER_TOKEN)
+
+
+@router.get("/settings/{group_id}/context-size", response_model=ContextSizeResponse)
+@auto_handle_errors
+async def get_context_size(group_id: str) -> ContextSizeResponse:
+    """
+    Return estimated token counts for a project's context files.
+
+    Args:
+        group_id (str): Telegram group ID.
+
+    Returns:
+        ContextSizeResponse: Token counts per file and total.
+
+    Raises:
+        HTTPException: 404 if project not found.
+    """
+    # 1. Look up project
+    project = CONTEXT.state_manager.get_project(group_id)
+    if project is None:
+        raise HTTPException(status_code=404, detail=f"Project '{group_id}' not found")
+
+    # 2. Read CLAUDE.md (empty string if missing)
+    claude_md_path = CONTEXT.RUNTIME_CONFIG.PATH_WORKSPACES / project.project_id / "CLAUDE.md"
+    claude_md_text = claude_md_path.read_text() if claude_md_path.exists() else ""
+
+    # 3. Read system prompt via openclaw_writer (agent_id == project_id by convention)
+    system_prompt_text = CONTEXT.openclaw_writer.get_agent_system_prompt(project.project_id)
+
+    # 4. Read SESSION_MEMORY.md via memory_manager
+    try:
+        session_memory_text = CONTEXT.memory_manager.read_memory(project.project_id)
+    except Exception:
+        session_memory_text = ""
+
+    # 5. Compute individual estimates
+    claude_md_tokens = _estimate_tokens(claude_md_text)
+    system_prompt_tokens = _estimate_tokens(system_prompt_text)
+    session_memory_tokens = _estimate_tokens(session_memory_text)
+    total = claude_md_tokens + system_prompt_tokens + session_memory_tokens
+
+    return ContextSizeResponse(
+        total=total,
+        claude_md=claude_md_tokens,
+        system_prompt=system_prompt_tokens,
+        session_memory=session_memory_tokens,
+    )
+
+
+@router.get("/settings/{group_id}/schedule", response_model=ScheduleConfig)
+@auto_handle_errors
+async def get_project_schedule(group_id: str) -> ScheduleConfig:
+    """
+    Return the project's schedule config (or defaults if in inherit mode).
+
+    Args:
+        group_id (str): Telegram group ID.
+
+    Returns:
+        ScheduleConfig: Active schedule config.
+
+    Raises:
+        HTTPException: 404 if project not found.
+    """
+    # 1. Look up project
+    project = CONTEXT.state_manager.get_project(group_id)
+    if project is None:
+        raise HTTPException(status_code=404, detail=f"Project '{group_id}' not found")
+
+    # 2. Return custom schedule if set, else return ScheduleConfig defaults
+    return project.schedule if project.schedule is not None else ScheduleConfig()
+
+
+@router.put("/settings/{group_id}/schedule", response_model=SettingsResponse)
+@auto_handle_errors
+async def put_project_schedule(group_id: str, body: ScheduleRequest) -> SettingsResponse:
+    """
+    Save or clear a project's schedule config.
+
+    A null body.schedule reverts the project to inheriting the global schedule.
+
+    Args:
+        group_id (str): Telegram group ID.
+        body (ScheduleRequest): New schedule (or null to inherit global).
+
+    Returns:
+        SettingsResponse: Success status.
+
+    Raises:
+        HTTPException: 404 if project not found.
+    """
+    # 1. Look up project
+    project = CONTEXT.state_manager.get_project(group_id)
+    if project is None:
+        raise HTTPException(status_code=404, detail=f"Project '{group_id}' not found")
+
+    # 2. Apply schedule (None = inherit global)
+    project.schedule = body.schedule
+    CONTEXT.state_manager.upsert_project(group_id, project)
+
+    return SettingsResponse(status="ok")
