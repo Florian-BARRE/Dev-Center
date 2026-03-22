@@ -3,9 +3,9 @@ import { theme } from '../theme';
 type Status = 'active' | 'idle' | 'warning';
 
 const STATUS_CONFIG: Record<Status, { label: string; color: string; bg: string }> = {
-  active:  { label: 'Active',  color: theme.colors.primary,  bg: '#0d2818' },
-  idle:    { label: 'Idle',    color: theme.colors.muted,    bg: theme.colors.surface },
-  warning: { label: 'Warning', color: theme.colors.warning,  bg: '#2d1e00' },
+  active:  { label: 'Active',  color: theme.colors.success, bg: theme.colors.successBg },
+  idle:    { label: 'Idle',    color: theme.colors.muted,   bg: theme.colors.surface },
+  warning: { label: 'Warning', color: theme.colors.warning, bg: theme.colors.warningBg },
 };
 
 interface StatusBadgeProps {

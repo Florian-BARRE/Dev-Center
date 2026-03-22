@@ -216,7 +216,7 @@ export default function TelegramTab({ project }: TelegramTabProps) {
                 background: theme.colors.primary,
                 border: 'none',
                 borderRadius: theme.radius.md,
-                color: '#fff',
+                color: theme.colors.onPrimary,
                 fontSize: theme.font.size.sm,
                 cursor: 'pointer',
               }}>

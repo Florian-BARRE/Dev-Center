@@ -98,7 +98,7 @@ export default function DefaultsEditor() {
         <button onClick={save} disabled={saving} style={{
           padding: `${theme.spacing.sm} ${theme.spacing.lg}`,
           background: saved ? theme.colors.success : theme.colors.primary,
-          border: 'none', borderRadius: theme.radius.md, color: '#fff',
+          border: 'none', borderRadius: theme.radius.md, color: theme.colors.onPrimary,
           fontSize: theme.font.size.sm, fontWeight: theme.font.weight.semibold,
           cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.6 : 1,
           transition: theme.transition.fast,
