@@ -51,15 +51,13 @@ describe('ProjectPage', () => {
     await waitFor(() => expect(screen.getAllByText('my-project').length).toBeGreaterThanOrEqual(1));
   });
 
-  it('renders 4 tabs', async () => {
+  it('renders 3 tabs', async () => {
     renderWithRoute();
-    // Match tab labels exactly to avoid collisions with action buttons in tab content
-    // (e.g. "Stop Bridge" in OverviewTab would also match /bridge/i).
+    // Match tab labels exactly to avoid collisions with action buttons in tab content.
     await waitFor(() => {
       expect(screen.getByRole('button', { name: 'Overview' })).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: 'Bridge' })).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: 'Memory' })).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: 'Settings' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Telegram' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Code Session' })).toBeInTheDocument();
     });
   });
 
@@ -70,21 +68,35 @@ describe('ProjectPage', () => {
     expect(screen.getByText(/git@github\.com/)).toBeInTheDocument();
   });
 
-  it('Settings tab shows model selector', async () => {
+  it('Telegram tab shows model selector', async () => {
     renderWithRoute();
-    await waitFor(() => screen.getByRole('button', { name: /settings/i }));
-    fireEvent.click(screen.getByRole('button', { name: /settings/i }));
+    await waitFor(() => screen.getByRole('button', { name: /telegram/i }));
+    fireEvent.click(screen.getByRole('button', { name: /telegram/i }));
     await waitFor(() => expect(screen.getByRole('combobox')).toBeInTheDocument());
   });
 
-  it('settings tab loads and shows system prompt textarea', async () => {
+  it('Telegram tab loads and shows system prompt textarea', async () => {
     renderWithRoute();
-    await waitFor(() => screen.getByRole('button', { name: /settings/i }));
-    fireEvent.click(screen.getByRole('button', { name: /settings/i }));
-    // The Settings tab renders two textareas: the Telegram Agent Prompt textarea
-    // and the MarkdownEditor (mocked as a textarea). Wait for them to appear and
-    // assert that at least one textbox (the Telegram prompt) is present.
+    await waitFor(() => screen.getByRole('button', { name: /telegram/i }));
+    fireEvent.click(screen.getByRole('button', { name: /telegram/i }));
+    // The Telegram tab renders a system-prompt textarea and a MarkdownEditor
+    // (mocked as a textarea). Assert that at least one textbox is present.
     const textboxes = await screen.findAllByRole('textbox');
     expect(textboxes.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('renders Overview, Telegram, Code Session tabs', async () => {
+    render(
+      <MemoryRouter initialEntries={['/projects/-100g']}>
+        <Routes>
+          <Route path="/projects/:groupId/*" element={<ProjectPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /overview/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /telegram/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /code session/i })).toBeInTheDocument();
+    });
   });
 });
