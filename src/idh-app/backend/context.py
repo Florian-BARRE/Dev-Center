@@ -12,6 +12,7 @@ from loggerplusplus import LoggerPlusPlus
 from config import RUNTIME_CONFIG
 from libs.activity.activity_log import ActivityLog
 from libs.bridge.bridge_manager import BridgeManager
+from libs.event_bus.event_bus import EventBus
 from libs.git_ops.git_manager import GitManager
 from libs.global_config.global_config_manager import GlobalConfigManager
 from libs.memory.codex_summarizer import CodexSummarizer
@@ -47,3 +48,4 @@ class CONTEXT:
     activity_log: ActivityLog
     global_config_manager: GlobalConfigManager
     scheduler: SchedulerService
+    event_bus: EventBus

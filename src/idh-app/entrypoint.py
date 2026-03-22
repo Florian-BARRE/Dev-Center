@@ -20,6 +20,7 @@ from config import RUNTIME_CONFIG  # MUST be first — registers sys.path
 from backend import CONTEXT, create_app
 from libs.activity.activity_log import ActivityLog
 from libs.bridge.bridge_manager import BridgeManager
+from libs.event_bus.event_bus import EventBus
 from libs.git_ops.git_manager import GitManager
 from libs.global_config.global_config_manager import GlobalConfigManager
 from libs.memory.codex_summarizer import CodexSummarizer
@@ -56,18 +57,23 @@ def _build_app() -> FastAPI:
     CONTEXT.webhook_client = WebhookClient(
         webhook_url="",  # Placeholder — no webhook URL in RUNTIME_CONFIG yet
     )
+    # Instantiate EventBus before services that emit events
+    CONTEXT.event_bus = EventBus()
     CONTEXT.bridge_manager = BridgeManager(
         state_manager=CONTEXT.state_manager,
         codex_dir=RUNTIME_CONFIG.PATH_CODEX_DIR,
         claude_dir=RUNTIME_CONFIG.PATH_CLAUDE_DIR,
         bridge_ttl_hours=RUNTIME_CONFIG.BRIDGE_TTL_HOURS,
+        event_bus=CONTEXT.event_bus,
     )
     CONTEXT.memory_manager = MemoryManager(
         claude_dir=RUNTIME_CONFIG.PATH_CLAUDE_DIR,
         workspaces_dir=RUNTIME_CONFIG.PATH_WORKSPACES,
+        event_bus=CONTEXT.event_bus,
     )
     CONTEXT.codex_summarizer = CodexSummarizer(
         codex_dir=RUNTIME_CONFIG.PATH_CODEX_DIR,
+        event_bus=CONTEXT.event_bus,
     )
 
     CONTEXT.activity_log = ActivityLog(max_entries=200)
@@ -84,6 +90,7 @@ def _build_app() -> FastAPI:
         activity_log=CONTEXT.activity_log,
         telegram_notifier=telegram_notifier,
         workspaces_dir=RUNTIME_CONFIG.PATH_WORKSPACES,
+        event_bus=CONTEXT.event_bus,
     )
 
     # 3. Create the FastAPI app

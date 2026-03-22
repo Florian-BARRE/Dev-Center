@@ -2,12 +2,18 @@
 # BridgeManager — starts/stops claude remote-control bridges and runs the expiry watchdog.
 
 # ====== Standard Library Imports ======
+from __future__ import annotations
+
 import asyncio
 import datetime
 import os
 import pathlib
 import signal
 from collections.abc import AsyncIterator
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from libs.event_bus.event_bus import EventBus
 
 # ====== Third-Party Library Imports ======
 from loggerplusplus import LoggerClass
@@ -32,6 +38,7 @@ class BridgeManager(LoggerClass):
         _bridge_ttl_hours (int): Bridge lifetime in hours.
         _processes (dict[str, asyncio.subprocess.Process]): In-memory map of
             group_id → live subprocess handle for log streaming.
+        _event_bus (EventBus | None): Optional event bus for publishing real-time events.
     """
 
     def __init__(
@@ -40,6 +47,7 @@ class BridgeManager(LoggerClass):
         codex_dir: pathlib.Path,
         claude_dir: pathlib.Path,
         bridge_ttl_hours: int,
+        event_bus: "EventBus | None" = None,
     ) -> None:
         """
         Initialise the BridgeManager.
@@ -49,12 +57,14 @@ class BridgeManager(LoggerClass):
             codex_dir (pathlib.Path): Codex home directory path.
             claude_dir (pathlib.Path): Claude config directory path.
             bridge_ttl_hours (int): Bridge TTL in hours.
+            event_bus (EventBus | None): Optional event bus for real-time event emission.
         """
         LoggerClass.__init__(self)
         self._state_manager = state_manager
         self._codex_dir = codex_dir
         self._claude_dir = claude_dir
         self._bridge_ttl_hours = bridge_ttl_hours
+        self._event_bus: "EventBus | None" = event_bus
         # In-memory process map — enables log streaming via tail_logs()
         self._processes: dict[str, asyncio.subprocess.Process] = {}
 
@@ -110,7 +120,13 @@ class BridgeManager(LoggerClass):
                 self._kill_bridge(project.bridge.pid)
                 project.bridge = None
 
-        # 3. Persist the updated state
+                # 3. Emit session.expired event
+                if self._event_bus is not None:
+                    await self._event_bus.publish(
+                        "session.expired", {}, group_id=group_id
+                    )
+
+        # 4. Persist the updated state
         self._state_manager.save(state)
 
     async def _watchdog_loop(self) -> None:
@@ -166,6 +182,14 @@ class BridgeManager(LoggerClass):
         self._processes[group_id] = proc
         self.logger.info(f"Bridge PID {proc.pid} started for group '{group_id}'")
 
+        # 5. Emit session.started event
+        if self._event_bus is not None:
+            await self._event_bus.publish(
+                "session.started",
+                {"pid": proc.pid, "workspace": str(workspace), "expires_at": expires},
+                group_id=group_id,
+            )
+
     async def stop_bridge(self, group_id: str) -> None:
         """
         Stop the active bridge for a project and clear its state.
@@ -186,6 +210,10 @@ class BridgeManager(LoggerClass):
         # Remove the in-memory process handle so tail_logs returns early
         self._processes.pop(group_id, None)
         self.logger.info(f"Bridge stopped for group '{group_id}'")
+
+        # 3. Emit session.stopped event
+        if self._event_bus is not None:
+            await self._event_bus.publish("session.stopped", {}, group_id=group_id)
 
     async def renew_bridge(self, group_id: str) -> None:
         """

@@ -3,10 +3,17 @@
 # and JSONL transcript files.
 
 # ====== Standard Library Imports ======
+from __future__ import annotations
+
+import asyncio
 import pathlib
+from typing import TYPE_CHECKING
 
 # ====== Third-Party Library Imports ======
 from loggerplusplus import LoggerClass
+
+if TYPE_CHECKING:
+    from libs.event_bus.event_bus import EventBus
 
 
 class MemoryManager(LoggerClass):
@@ -22,19 +29,27 @@ class MemoryManager(LoggerClass):
     Attributes:
         _claude_dir (pathlib.Path): Root Claude configuration directory.
         _workspaces_dir (pathlib.Path): Root workspaces directory.
+        _event_bus (EventBus | None): Optional event bus for publishing real-time events.
     """
 
-    def __init__(self, claude_dir: pathlib.Path, workspaces_dir: pathlib.Path) -> None:
+    def __init__(
+        self,
+        claude_dir: pathlib.Path,
+        workspaces_dir: pathlib.Path,
+        event_bus: "EventBus | None" = None,
+    ) -> None:
         """
         Initialise the MemoryManager.
 
         Args:
             claude_dir (pathlib.Path): Path to the Claude config directory.
             workspaces_dir (pathlib.Path): Path to the workspaces root directory.
+            event_bus (EventBus | None): Optional event bus for real-time event emission.
         """
         LoggerClass.__init__(self)
         self._claude_dir = claude_dir
         self._workspaces_dir = workspaces_dir
+        self._event_bus: "EventBus | None" = event_bus
 
     # ──────────────────────────── Private helpers ────────────────────────────
 
@@ -86,6 +101,15 @@ class MemoryManager(LoggerClass):
         path.write_text(content)
         self.logger.info(f"Memory written for project '{project_id}'")
 
+        # 3. Emit memory.updated event
+        if self._event_bus is not None:
+            asyncio.create_task(
+                self._event_bus.publish(
+                    "memory.updated",
+                    {"project_id": project_id, "file": "CLAUDE.md"},
+                )
+            )
+
     def read_session_memory(self, project_id: str) -> str:
         """
         Read SESSION_MEMORY.md content for a project.
@@ -120,6 +144,15 @@ class MemoryManager(LoggerClass):
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(content)
         self.logger.info(f"Session memory written for project '{project_id}'")
+
+        # 3. Emit memory.updated event
+        if self._event_bus is not None:
+            asyncio.create_task(
+                self._event_bus.publish(
+                    "memory.updated",
+                    {"project_id": project_id, "file": "SESSION_MEMORY.md"},
+                )
+            )
 
     def get_latest_transcript(self, project_id: str) -> str:
         """

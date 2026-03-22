@@ -3,12 +3,18 @@
 # sends pre-transition warnings, and auto-renews expiring bridges.
 
 # ====== Standard Library Imports ======
+from __future__ import annotations
+
 import asyncio
 import datetime
 import pathlib
+from typing import TYPE_CHECKING
 
 # ====== Third-Party Library Imports ======
 from loggerplusplus import LoggerClass
+
+if TYPE_CHECKING:
+    from libs.event_bus.event_bus import EventBus
 
 # ====== Local Project Imports ======
 from libs.state.models import Project, ScheduleConfig, ScheduleWindow
@@ -42,6 +48,7 @@ class SchedulerService(LoggerClass):
         _telegram_notifier (TelegramNotifier): Sends Telegram alerts.
         _workspaces_dir (pathlib.Path): Base dir for project workspaces.
         _warn_state (dict[str, datetime.datetime]): Last-warned time per group_id.
+        _event_bus (EventBus | None): Optional event bus for publishing real-time events.
     """
 
     def __init__(
@@ -52,6 +59,7 @@ class SchedulerService(LoggerClass):
         activity_log: ActivityLog,
         telegram_notifier: TelegramNotifier,
         workspaces_dir: pathlib.Path,
+        event_bus: "EventBus | None" = None,
     ) -> None:
         """
         Initialise the SchedulerService.
@@ -63,6 +71,7 @@ class SchedulerService(LoggerClass):
             activity_log: Activity log for monitoring events.
             telegram_notifier: Sends Telegram transition alerts.
             workspaces_dir: Base directory for project workspaces.
+            event_bus: Optional EventBus instance to emit events to. Defaults to None.
         """
         LoggerClass.__init__(self)
         self._state_manager = state_manager
@@ -71,6 +80,7 @@ class SchedulerService(LoggerClass):
         self._activity_log = activity_log
         self._telegram_notifier = telegram_notifier
         self._workspaces_dir = workspaces_dir
+        self._event_bus: "EventBus | None" = event_bus
         self._warn_state: dict[str, datetime.datetime] = {}
 
     # ──────────────────────────── Private helpers ─────────────────────────────
@@ -166,6 +176,14 @@ class SchedulerService(LoggerClass):
             except Exception as exc:
                 self.logger.error(f"Scheduler error for group '{group_id}': {exc}")
 
+        # 3. Emit scheduler.tick event with count of currently active projects
+        if self._event_bus is not None:
+            state = self._state_manager.load()
+            await self._event_bus.publish(
+                "scheduler.tick",
+                {"active_projects": sum(1 for p in state.projects.values() if p.bridge is not None)},
+            )
+
     async def _process_project(
         self,
         group_id: str,
@@ -232,6 +250,13 @@ class SchedulerService(LoggerClass):
                         f"Telegram alert sent — session ending in {remaining}",
                         level="warning",
                     )
+                    if self._event_bus is not None:
+                        remaining_minutes = max(0, int((expires - now).total_seconds() // 60))
+                        await self._event_bus.publish(
+                            "scheduler.warning_sent",
+                            {"remaining_minutes": remaining_minutes},
+                            group_id=group_id,
+                        )
 
     async def _run_loop(self) -> None:
         """Run indefinitely, calling _tick every 60 seconds."""

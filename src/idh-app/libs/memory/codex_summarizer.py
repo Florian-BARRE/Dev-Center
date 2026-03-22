@@ -2,12 +2,18 @@
 # CodexSummarizer — runs codex compress to generate project summaries.
 
 # ====== Standard Library Imports ======
+from __future__ import annotations
+
 import asyncio
 import os
 import pathlib
+from typing import TYPE_CHECKING
 
 # ====== Third-Party Library Imports ======
 from loggerplusplus import LoggerClass
+
+if TYPE_CHECKING:
+    from libs.event_bus.event_bus import EventBus
 
 
 class CodexSummarizer(LoggerClass):
@@ -19,17 +25,24 @@ class CodexSummarizer(LoggerClass):
 
     Attributes:
         _codex_dir (pathlib.Path): Codex CLI home directory.
+        _event_bus (EventBus | None): Optional event bus for publishing real-time events.
     """
 
-    def __init__(self, codex_dir: pathlib.Path) -> None:
+    def __init__(
+        self,
+        codex_dir: pathlib.Path,
+        event_bus: "EventBus | None" = None,
+    ) -> None:
         """
         Initialise the CodexSummarizer.
 
         Args:
             codex_dir (pathlib.Path): Path to the Codex home directory.
+            event_bus (EventBus | None): Optional event bus for real-time event emission.
         """
         LoggerClass.__init__(self)
         self._codex_dir = codex_dir
+        self._event_bus: "EventBus | None" = event_bus
 
     # ──────────────────────────── Public API ────────────────────────────────
 
@@ -48,6 +61,13 @@ class CodexSummarizer(LoggerClass):
         """
         # 1. Launch the codex compress subprocess with stdout capture
         self.logger.info(f"Running codex compress in '{workspace}'")
+
+        # 1b. Emit summarizer.started event
+        if self._event_bus is not None:
+            await self._event_bus.publish(
+                "summarizer.started",
+                {"workspace": str(workspace)},
+            )
         proc = await asyncio.create_subprocess_exec(
             "codex",
             "compress",
@@ -64,4 +84,11 @@ class CodexSummarizer(LoggerClass):
         if proc.returncode != 0:
             raise RuntimeError(f"codex compress failed (exit {proc.returncode})")
 
-        return stdout.decode().strip()
+        result = stdout.decode().strip()
+        # 3b. Emit summarizer.completed event
+        if self._event_bus is not None:
+            await self._event_bus.publish(
+                "summarizer.completed",
+                {"workspace": str(workspace), "output_length": len(result)},
+            )
+        return result
