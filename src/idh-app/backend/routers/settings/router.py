@@ -14,7 +14,7 @@ from fastapi import APIRouter, Header, HTTPException, Request
 from backend.context import CONTEXT
 from backend.libs.utils.error_handling import auto_handle_errors
 from libs.state.models import GlobalDefaults, ModelOverride, Project, ScheduleConfig
-from .models import ContextSizeResponse, FileContentResponse, FileWriteRequest, ModelResponse, ModelUpdateRequest, ScheduleRequest, SettingsResponse, TelegramPromptRequest, TelegramPromptResponse, WebhookPayload
+from .models import ContextSizeResponse, FileContentResponse, FileWriteRequest, ModelResponse, ModelUpdateRequest, ScheduleRequest, SettingsResponse, TelegramModelRequest, TelegramModelResponse, TelegramPromptRequest, TelegramPromptResponse, WebhookPayload
 
 router = APIRouter(tags=["settings"])
 
@@ -513,4 +513,59 @@ async def put_project_schedule(group_id: str, body: ScheduleRequest) -> Settings
     project.schedule = body.schedule
     CONTEXT.state_manager.upsert_project(group_id, project)
 
+    return SettingsResponse(status="ok")
+
+
+@router.get("/settings/{group_id}/telegram-model", response_model=TelegramModelResponse)
+@auto_handle_errors
+async def get_telegram_model(group_id: str) -> TelegramModelResponse:
+    """
+    Read the Telegram agent model (provider + model) for a project.
+
+    The agent_id is always equal to project.project_id by convention.
+
+    Args:
+        group_id (str): Telegram group ID.
+
+    Returns:
+        TelegramModelResponse: Current provider and model (empty strings if unset).
+
+    Raises:
+        HTTPException: 404 if the project is not found.
+    """
+    # 1. Look up project
+    project = CONTEXT.state_manager.get_project(group_id)
+    if project is None:
+        raise HTTPException(status_code=404, detail=f"Project '{group_id}' not found")
+
+    # 2. Read from openclaw.json (agent_id == project_id by convention)
+    provider, model = CONTEXT.openclaw_writer.get_agent_model(project.project_id)
+    return TelegramModelResponse(provider=provider, model=model)
+
+
+@router.put("/settings/{group_id}/telegram-model", response_model=SettingsResponse)
+@auto_handle_errors
+async def put_telegram_model(group_id: str, body: TelegramModelRequest) -> SettingsResponse:
+    """
+    Update the Telegram agent model for a project.
+
+    Writes provider and model into openclaw.json under agents.<project_id>.model.
+
+    Args:
+        group_id (str): Telegram group ID.
+        body (TelegramModelRequest): New provider and model.
+
+    Returns:
+        SettingsResponse: Success status.
+
+    Raises:
+        HTTPException: 404 if the project is not found.
+    """
+    # 1. Look up project
+    project = CONTEXT.state_manager.get_project(group_id)
+    if project is None:
+        raise HTTPException(status_code=404, detail=f"Project '{group_id}' not found")
+
+    # 2. Write to openclaw.json (agent_id == project_id by convention)
+    CONTEXT.openclaw_writer.update_agent_model(project.project_id, body.provider, body.model)
     return SettingsResponse(status="ok")

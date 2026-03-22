@@ -131,3 +131,29 @@ class ScheduleRequest(BaseModel):
     """Request body for PUT /settings/{group_id}/schedule. None resets to inherit."""
 
     schedule: ScheduleConfig | None = None
+
+
+class TelegramModelResponse(_CamelModel):
+    """
+    Response model for reading a Telegram agent's model.
+
+    Attributes:
+        provider (str): AI provider slug.
+        model (str): Model identifier.
+    """
+
+    provider: str
+    model: str
+
+
+class TelegramModelRequest(_CamelModel):
+    """
+    Request body for updating a Telegram agent's model.
+
+    Attributes:
+        provider (str): AI provider slug (e.g. ``"anthropic"``).
+        model (str): Model identifier (e.g. ``"claude-sonnet-4-6"``).
+    """
+
+    provider: str = Field(..., description="AI provider slug.")
+    model: str = Field(..., description="Model identifier.")
