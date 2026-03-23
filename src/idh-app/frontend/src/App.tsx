@@ -8,6 +8,7 @@ import ProjectPage from './pages/Project/ProjectPage';
 import NewProjectPage from './pages/NewProject/NewProjectPage';
 import GlobalSettingsPage from './pages/GlobalSettings/SettingsPage';
 import MonitoringPage from './pages/Monitoring/MonitoringPage';
+import LogConsole from './components/LogConsole';
 
 // ── Icon helpers ──────────────────────────────────────────────────────────────
 
@@ -251,6 +252,8 @@ function AppLayout() {
           <Route path="/settings" element={<GlobalSettingsPage />} />
         </Routes>
       </main>
+      {/* Always-visible floating log console — bottom-right corner */}
+      <LogConsole />
     </div>
   );
 }

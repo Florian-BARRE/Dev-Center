@@ -8,13 +8,14 @@ from contextlib import asynccontextmanager
 from typing import Any, AsyncIterator
 
 # ====== Third-Party Library Imports ======
+from loggerplusplus import loggerplusplus
 from pyfiglet import Figlet
 
 # ====== Local Project Imports ======
 from .context import CONTEXT
 
 # Total startup steps — update when adding/removing steps.
-TOTAL_STEPS = 5
+TOTAL_STEPS = 6
 
 
 def lifespan() -> Any:
@@ -67,6 +68,12 @@ def lifespan() -> Any:
             # 6. Start session scheduler
             log_step(5, "Session scheduler")
             scheduler_task = await CONTEXT.scheduler.start()
+
+            # 7. Wire LogBroadcaster into loggerplusplus for real-time log streaming
+            log_step(6, "Log broadcaster")
+            CONTEXT.log_broadcaster.set_loop(asyncio.get_running_loop())
+            loggerplusplus.add(CONTEXT.log_broadcaster.make_sink())
+            CONTEXT.logger.info(f"Log broadcaster ready — streaming all log levels via WebSocket")
 
             # Yield — app is now running
             yield

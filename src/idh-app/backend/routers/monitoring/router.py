@@ -142,6 +142,32 @@ async def get_activity(limit: int = 100) -> ActivityLogResponse:
     return ActivityLogResponse(entries=entries)
 
 
+@router.websocket("/monitoring/logs-ws")
+async def monitoring_logs_ws(websocket: WebSocket) -> None:
+    """
+    Stream real-time loggerplusplus log records to a connected WebSocket client.
+
+    Accepts the connection, subscribes to the LogBroadcaster, and forwards
+    each record as a JSON message until the client disconnects.
+
+    Args:
+        websocket (WebSocket): The incoming WebSocket connection.
+    """
+    # 1. Upgrade the HTTP connection to WebSocket
+    await websocket.accept()
+    try:
+        # 2. Subscribe to the LogBroadcaster and stream records indefinitely
+        async with CONTEXT.log_broadcaster.subscribe() as sub:
+            async for record in sub:
+                await websocket.send_json(record)
+    except WebSocketDisconnect:
+        pass
+    except Exception as exc:
+        CONTEXT.logger.error(f"[monitoring_logs_ws] unexpected error: {exc}")
+    finally:
+        await websocket.close()
+
+
 @router.websocket("/monitoring/ws")
 async def monitoring_ws(websocket: WebSocket) -> None:
     """

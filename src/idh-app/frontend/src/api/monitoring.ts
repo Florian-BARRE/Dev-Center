@@ -14,3 +14,9 @@ export function createMonitoringSocket(): WebSocket {
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
   return new WebSocket(`${protocol}//${window.location.host}/api/v1/monitoring/ws`);
 }
+
+/** Opens a WebSocket to the real-time log stream. Caller owns lifecycle. */
+export function createLogsSocket(): WebSocket {
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  return new WebSocket(`${protocol}//${window.location.host}/api/v1/monitoring/logs-ws`);
+}

@@ -21,6 +21,7 @@ from backend import CONTEXT, create_app
 from libs.activity.activity_log import ActivityLog
 from libs.bridge.bridge_manager import BridgeManager
 from libs.event_bus.event_bus import EventBus
+from libs.log_broadcaster.log_broadcaster import LogBroadcaster
 from libs.git_ops.git_manager import GitManager
 from libs.global_config.global_config_manager import GlobalConfigManager
 from libs.memory.codex_summarizer import CodexSummarizer
@@ -57,8 +58,9 @@ def _build_app() -> FastAPI:
     CONTEXT.webhook_client = WebhookClient(
         webhook_url="",  # Placeholder — no webhook URL in RUNTIME_CONFIG yet
     )
-    # Instantiate EventBus before services that emit events
+    # Instantiate EventBus and LogBroadcaster before services that emit events
     CONTEXT.event_bus = EventBus()
+    CONTEXT.log_broadcaster = LogBroadcaster()
     CONTEXT.bridge_manager = BridgeManager(
         state_manager=CONTEXT.state_manager,
         codex_dir=RUNTIME_CONFIG.PATH_CODEX_DIR,

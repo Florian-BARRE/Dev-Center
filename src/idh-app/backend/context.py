@@ -14,6 +14,7 @@ from libs.activity.activity_log import ActivityLog
 from libs.bridge.bridge_manager import BridgeManager
 from libs.event_bus.event_bus import EventBus
 from libs.git_ops.git_manager import GitManager
+from libs.log_broadcaster.log_broadcaster import LogBroadcaster
 from libs.global_config.global_config_manager import GlobalConfigManager
 from libs.memory.codex_summarizer import CodexSummarizer
 from libs.memory.memory_manager import MemoryManager
@@ -49,3 +50,4 @@ class CONTEXT:
     global_config_manager: GlobalConfigManager
     scheduler: SchedulerService
     event_bus: EventBus
+    log_broadcaster: LogBroadcaster
