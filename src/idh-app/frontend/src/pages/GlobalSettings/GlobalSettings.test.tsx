@@ -26,7 +26,7 @@ describe('GlobalSettings page', () => {
       defaultBridgeTtlHours: 8, defaultTelegramPrompt: '',
     });
     vi.mocked(settingsApi.getGlobalScheduling).mockResolvedValue({
-      enabled: false, windows: [], warnLeadMinutes: 60, warnIntervalMinutes: 10, alertTemplate: '',
+      enabled: false, renewalTimes: [], days: [], warnLeadMinutes: 30, warnIntervalMinutes: 10, alertTemplate: '',
     });
   });
 

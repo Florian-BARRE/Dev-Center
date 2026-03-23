@@ -54,40 +54,32 @@ class ModelOverride(_CamelModel):
     model: str
 
 
-class ScheduleWindow(_CamelModel):
-    """
-    A single scheduled session time window.
-
-    Attributes:
-        start_time (str): Window start in 24h HH:MM format, e.g. "08:00".
-        end_time (str): Window end in 24h HH:MM format, e.g. "16:00".
-        days (list[str]): Active days — subset of ["mon","tue","wed","thu","fri","sat","sun"].
-    """
-
-    start_time: str
-    end_time: str
-    days: list[str]
-
-
 class ScheduleConfig(_CamelModel):
     """
     Session scheduling configuration for one project (or global defaults).
 
+    The schedule defines specific HH:MM times at which the bridge is automatically
+    renewed or started. Warnings are sent ``warn_lead_minutes`` before each renewal.
+
     Attributes:
         enabled (bool): Whether scheduling is active.
-        windows (list[ScheduleWindow]): Time windows when bridge should run.
-        warn_lead_minutes (int): Send warning N minutes before window end.
+        renewal_times (list[str]): HH:MM 24h times to auto-renew the bridge,
+            e.g. ["08:00", "16:00"].
+        days (list[str]): Days when the schedule is active — subset of
+            ["mon","tue","wed","thu","fri","sat","sun"]. Empty list means all days.
+        warn_lead_minutes (int): Send warning N minutes before each renewal time.
         warn_interval_minutes (int): Resend warning every N minutes.
         alert_template (str): Telegram message template; use {remaining} placeholder.
     """
 
     enabled: bool = False
-    windows: list[ScheduleWindow] = []
-    warn_lead_minutes: int = 60
+    renewal_times: list[str] = []
+    days: list[str] = []
+    warn_lead_minutes: int = 30
     warn_interval_minutes: int = 10
     alert_template: str = (
-        "⏰ Session ending in {remaining}. Ready to transition? "
-        "[✅ Now] [⏳ +30 min] [🔄 Wait]"
+        "⏰ Session renewing in {remaining}. Ready? "
+        "[✅ Now] [⏳ +30 min] [🔄 Later]"
     )
 
 
@@ -175,7 +167,6 @@ class ActivityEntry(_CamelModel):
 __all__ = [
     "BridgeState",
     "ModelOverride",
-    "ScheduleWindow",
     "ScheduleConfig",
     "Project",
     "StateFile",

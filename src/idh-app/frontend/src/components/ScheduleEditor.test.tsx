@@ -5,10 +5,11 @@ import type { ScheduleConfig } from '../api/types';
 
 const defaultConfig: ScheduleConfig = {
   enabled: false,
-  windows: [],
-  warnLeadMinutes: 60,
+  renewalTimes: [],
+  days: [],
+  warnLeadMinutes: 30,
   warnIntervalMinutes: 10,
-  alertTemplate: '⏰ Session ending in {remaining}.',
+  alertTemplate: '⏰ Session renewing in {remaining}.',
 };
 
 describe('ScheduleEditor', () => {
@@ -25,39 +26,39 @@ describe('ScheduleEditor', () => {
     expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ enabled: true }));
   });
 
-  it('shows Add window button', () => {
+  it('shows Add time button', () => {
     render(<ScheduleEditor value={defaultConfig} onChange={() => {}} />);
-    expect(screen.getByRole('button', { name: /add window/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /add renewal time/i })).toBeInTheDocument();
   });
 
-  it('calls onChange with new window when Add window is clicked', () => {
+  it('calls onChange with new renewal time when Add time is clicked', () => {
     const onChange = vi.fn();
     render(<ScheduleEditor value={defaultConfig} onChange={onChange} />);
-    fireEvent.click(screen.getByRole('button', { name: /add window/i }));
+    fireEvent.click(screen.getByRole('button', { name: /add renewal time/i }));
     const call = onChange.mock.calls[0][0] as ScheduleConfig;
-    expect(call.windows).toHaveLength(1);
-    expect(call.windows[0].startTime).toBe('00:00');
+    expect(call.renewalTimes).toHaveLength(1);
+    expect(call.renewalTimes[0]).toBe('08:00');
   });
 
-  it('renders a window row when windows are provided', () => {
+  it('renders a time input when renewalTimes are provided', () => {
     const config: ScheduleConfig = {
       ...defaultConfig,
-      windows: [{ startTime: '08:00', endTime: '16:00', days: ['mon', 'tue'] }],
+      renewalTimes: ['08:00', '16:00'],
     };
     render(<ScheduleEditor value={config} onChange={() => {}} />);
     expect(screen.getByDisplayValue('08:00')).toBeInTheDocument();
     expect(screen.getByDisplayValue('16:00')).toBeInTheDocument();
   });
 
-  it('removes a window when × button is clicked', () => {
+  it('removes a renewal time when × button is clicked', () => {
     const onChange = vi.fn();
     const config: ScheduleConfig = {
       ...defaultConfig,
-      windows: [{ startTime: '08:00', endTime: '16:00', days: ['mon'] }],
+      renewalTimes: ['08:00'],
     };
     render(<ScheduleEditor value={config} onChange={onChange} />);
-    fireEvent.click(screen.getByRole('button', { name: /remove window/i }));
+    fireEvent.click(screen.getByRole('button', { name: /remove renewal time/i }));
     const call = onChange.mock.calls[0][0] as ScheduleConfig;
-    expect(call.windows).toHaveLength(0);
+    expect(call.renewalTimes).toHaveLength(0);
   });
 });

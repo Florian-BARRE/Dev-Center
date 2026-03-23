@@ -6,10 +6,11 @@ import type { ScheduleConfig } from '../../api/types';
 
 const DEFAULT_CONFIG: ScheduleConfig = {
   enabled: false,
-  windows: [],
-  warnLeadMinutes: 60,
+  renewalTimes: [],
+  days: [],
+  warnLeadMinutes: 30,
   warnIntervalMinutes: 10,
-  alertTemplate: '⏰ Session ending in {remaining}. Ready to transition? [✅ Now] [⏳ +30 min] [🔄 Wait]',
+  alertTemplate: '⏰ Session renewing in {remaining}. Ready? [✅ Now] [⏳ +30 min] [🔄 Later]',
 };
 
 export default function SchedulingEditor() {

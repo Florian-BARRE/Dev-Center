@@ -199,7 +199,7 @@ export default function OverviewTab({ project, onProjectChange }: OverviewTabPro
             <InfoCard title="Schedule">
               <div style={{ fontSize: theme.font.size.xs, color: theme.colors.muted }}>
                 {project.schedule.enabled
-                  ? `${project.schedule.windows.length} window${project.schedule.windows.length !== 1 ? 's' : ''} configured`
+                  ? `${project.schedule.renewalTimes.length} renewal time${project.schedule.renewalTimes.length !== 1 ? 's' : ''} configured`
                   : 'Schedule disabled'}
               </div>
             </InfoCard>

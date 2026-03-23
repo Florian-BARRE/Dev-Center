@@ -1,6 +1,6 @@
 import pytest
 from libs.state.models import (
-    BridgeState, Project, ScheduleWindow, ScheduleConfig,
+    BridgeState, Project, ScheduleConfig,
     GlobalDefaults, GlobalConfig, ActivityEntry
 )
 
@@ -12,18 +12,19 @@ def test_bridge_state_auto_renew_set():
     b = BridgeState(pid=123, workspace="/ws/foo", expires_at="2026-03-22T10:00:00+00:00", auto_renew=True)
     assert b.auto_renew is True
 
-def test_schedule_window_camel():
-    w = ScheduleWindow(start_time="08:00", end_time="16:00", days=["mon", "tue"])
-    data = w.model_dump(by_alias=True)
-    assert data["startTime"] == "08:00"
-    assert data["endTime"] == "16:00"
-
 def test_schedule_config_defaults():
     c = ScheduleConfig()
     assert c.enabled is False
-    assert c.windows == []
-    assert c.warn_lead_minutes == 60
+    assert c.renewal_times == []
+    assert c.days == []
+    assert c.warn_lead_minutes == 30
     assert c.warn_interval_minutes == 10
+
+def test_schedule_config_renewal_times_camel():
+    c = ScheduleConfig(enabled=True, renewal_times=["08:00", "16:00"], days=["mon", "fri"])
+    data = c.model_dump(by_alias=True)
+    assert data["renewalTimes"] == ["08:00", "16:00"]
+    assert data["days"] == ["mon", "fri"]
 
 def test_project_schedule_defaults_none():
     p = Project(group_id="-123", project_id="foo", repo_url="https://github.com/foo/bar")

@@ -19,15 +19,15 @@ const project: Project = {
   bridge: null, modelOverride: null, schedule: null,
 };
 
-function renderWithRoute(subPath = '') {
+function renderTab() {
   vi.mocked(bridgeApi.openBridgeLogs).mockReturnValue(mockWs as unknown as WebSocket);
   vi.mocked(projectsApi.getProject).mockResolvedValue(project);
+  vi.mocked(settingsApi.getModel).mockResolvedValue({ provider: 'anthropic', model: 'claude-sonnet-4-6' });
   vi.mocked(settingsApi.getClaudeMd).mockResolvedValue({ content: '' });
-  vi.mocked(settingsApi.getProjectSchedule).mockResolvedValue({ enabled: false, windows: [], warnLeadMinutes: 60, warnIntervalMinutes: 10, alertTemplate: '' });
-  vi.mocked(settingsApi.getGlobalScheduling).mockResolvedValue({ enabled: false, windows: [], warnLeadMinutes: 60, warnIntervalMinutes: 10, alertTemplate: '' });
-  vi.mocked(memoryApi.getTranscript).mockResolvedValue({ projectId: 'p', content: '' });
+  vi.mocked(settingsApi.getProjectSchedule).mockResolvedValue({ enabled: false, renewalTimes: [], days: [], warnLeadMinutes: 30, warnIntervalMinutes: 10, alertTemplate: '' });
+  vi.mocked(memoryApi.getSessionMemory).mockResolvedValue({ projectId: 'p', content: '' });
   return render(
-    <MemoryRouter initialEntries={[`/projects/-100g/code-session${subPath}`]}>
+    <MemoryRouter initialEntries={['/projects/-100g/code-session']}>
       <Routes>
         <Route path="/projects/:groupId/code-session/*" element={<CodeSessionTab project={project} onProjectChange={() => {}} />} />
       </Routes>
@@ -36,24 +36,23 @@ function renderWithRoute(subPath = '') {
 }
 
 describe('CodeSessionTab', () => {
-  it('renders Bridge sub-tab by default', () => {
-    renderWithRoute();
-    // Multiple elements may contain "Bridge" (nav button + content); verify at least one exists
-    expect(screen.getAllByText(/Bridge/i).length).toBeGreaterThan(0);
+  it('renders Session Model section', () => {
+    renderTab();
+    expect(screen.getByText(/Session Model/i)).toBeInTheDocument();
   });
 
-  it('renders Files sub-tab link', () => {
-    renderWithRoute();
-    expect(screen.getByRole('button', { name: /files/i })).toBeInTheDocument();
+  it('renders Coding Rules section', () => {
+    renderTab();
+    expect(screen.getByText(/Coding Rules/i)).toBeInTheDocument();
   });
 
-  it('renders Transcript sub-tab link', () => {
-    renderWithRoute();
-    expect(screen.getByRole('button', { name: /transcript/i })).toBeInTheDocument();
+  it('renders Session Memory section', () => {
+    renderTab();
+    expect(screen.getAllByText(/Session Memory/i).length).toBeGreaterThan(0);
   });
 
-  it('renders Schedule sub-tab link', () => {
-    renderWithRoute();
-    expect(screen.getByRole('button', { name: /schedule/i })).toBeInTheDocument();
+  it('renders Start Session button', () => {
+    renderTab();
+    expect(screen.getByRole('button', { name: /start session/i })).toBeInTheDocument();
   });
 });

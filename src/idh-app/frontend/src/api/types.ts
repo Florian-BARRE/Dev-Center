@@ -85,15 +85,10 @@ export const MODEL_OPTIONS: { provider: string; model: string; label: string }[]
 
 // ── Schedule types ────────────────────────────────────────────────────────
 
-export interface ScheduleWindow {
-  startTime: string;    // "HH:MM" 24h format
-  endTime: string;      // "HH:MM" 24h format
-  days: string[];       // ["mon","tue","wed","thu","fri","sat","sun"]
-}
-
 export interface ScheduleConfig {
   enabled: boolean;
-  windows: ScheduleWindow[];
+  renewalTimes: string[];   // ["08:00", "16:00"] — HH:MM 24h times to auto-renew
+  days: string[];           // ["mon","tue",...] — empty = all days
   warnLeadMinutes: number;
   warnIntervalMinutes: number;
   alertTemplate: string;
