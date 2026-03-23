@@ -99,7 +99,7 @@ class LogBroadcaster(LoggerClass):
         Returns:
             _Subscription: Async context manager and async iterator.
         """
-        return _Subscription(self)
+        return LogBroadcaster._Subscription(self)
 
     class _Subscription:
         """
