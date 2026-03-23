@@ -140,6 +140,7 @@ Feed of 20 most recent events, style:
 - Each row: timestamp (mono, muted) + event type (colored by type) + project name
 - Event type colors: `session_started/renewed` → green, `warning_sent` → orange, `session_stopped` → muted, `project_created` → white
 - Scrollable, max height fills the column
+- Data source: `getActivityLog(20)` from `api/monitoring.ts` — existing endpoint, no new API needed
 - Auto-refreshes every 15 seconds
 
 ---
@@ -251,7 +252,7 @@ Default values applied to every new project's code session:
 3 steps, centered card layout:
 
 1. **Dépôt** — GitHub repo URL input + validation
-2. **Modèle** — ModelSelector for both Telegram and code session (pre-filled with defaults from Settings)
+2. **Modèle** — ModelSelector for the **code session only** (pre-filled with default from Settings → Code Session). Telegram model is automatically set from the global default — no user input needed.
 3. **Confirmation** — summary card + Create button
 
 Progress indicator: `1 · 2 · 3` at top of card.
@@ -342,17 +343,67 @@ interface ScheduleConfig {
 
 ## 8. Backend Impact
 
-The simplified `ScheduleConfig` model (ranges instead of individual times + lead/interval) requires:
+### 8.1 ScheduleConfig model change
 
-- `ScheduleConfig` schema update in `libs/state/models.py`
-- `SchedulerService` update to interpret `ranges` (start a session when current time enters a range, stop when it exits)
-- API endpoint `PUT /api/v1/settings/schedule` and project-level equivalent to accept the new schema
+The new `ScheduleConfig` replaces `{ renewalTimes, days, warnLeadMinutes, warnIntervalMinutes, alertTemplate }` with `{ enabled, ranges, days }`. `warnLeadMinutes`, `warnIntervalMinutes`, and `alertTemplate` are dropped entirely — the backend uses fixed sensible defaults (warn 30 min before range end, repeat every 15 min, generic message).
+
+**Migration strategy for persisted state files** (`idh-projects.state.json`, `idh-global-config.json`):
+
+Both files embed `ScheduleConfig`. A Pydantic `model_validator(mode='before')` on `ScheduleConfig` detects the old format (presence of `renewalTimes` key) and converts it to the new format:
+- `renewalTimes: ["08:00", "18:00"]` → `ranges: [{"start": "08:00", "end": "00:00"}]` (end defaults to midnight)
+- `days` stays as-is
+- Old keys (`renewalTimes`, `warnLeadMinutes`, `warnIntervalMinutes`, `alertTemplate`) are discarded
+
+This validator runs transparently on load — no manual migration script required.
+
+**Files to update:**
+- `libs/state/models.py` — `ScheduleConfig` Pydantic model + migration validator
+- `libs/scheduler/scheduler_service.py` — interpret `ranges` (start session when time enters range, stop when it exits)
+- `backend/routers/settings/router.py` — schedule endpoints accept new schema
+- `backend/routers/projects/router.py` — project-level schedule endpoint accepts new schema
+
+### 8.2 Action button visibility rules (Project Page header)
+
+The three action buttons follow these visibility rules:
+- **Session idle:** show `[Démarrer]` only
+- **Session active:** show `[Arrêter]` + `[Renouveler]`
+- `[Renouveler]` is never shown when idle (nothing to renew)
+
+### 8.3 New Project Wizard — single model selector
+
+The wizard step 2 collects **one model** (for the code session only). The Telegram model is not collected during creation — it is automatically set from the global default (`Settings → Telegram → Modèle par défaut`). This keeps `CreateProjectRequest` unchanged. No backend API changes needed for the wizard.
+
+### 8.4 Home page activity feed
+
+The home page right column calls `getActivityLog(20)` from `api/monitoring.ts` and auto-refreshes every 15 seconds. No new endpoint needed — this reuses the existing `GET /api/v1/monitoring/activity?limit=20`.
+
+### 8.5 Project card Telegram model
+
+`ProjectCard` fetches the Telegram model via the existing `getTelegramModel(groupId)` call — one HTTP call per project (N+1). This is acceptable given typical small project counts (< 20). A future aggregated endpoint can be added later if needed; it is not in scope for this redesign.
+
+`telegramPrompt` is not displayed in the project card and remains a separate fetch inside `TelegramTab` only, as today.
 
 ---
 
-## 9. Out of Scope
+## 9. Tab label changes
 
-- No changes to API endpoints (except schedule schema)
+The following tab labels are explicitly changed as part of this redesign:
+
+| Location | Old label | New label |
+|---|---|---|
+| Project Page | OVERVIEW | OVERVIEW (unchanged) |
+| Project Page | TELEGRAM | SESSION TELEGRAM |
+| Project Page | CODE SESSION | SESSION CODE |
+| Settings | CODING RULES | TELEGRAM |
+| Settings | COMMON CONTEXT | CODE SESSION |
+| Settings | DEFAULTS | (removed) |
+| Settings | SCHEDULING | (removed) |
+
+---
+
+## 10. Out of Scope
+
+- No new API endpoints (except schedule schema update per Section 8.1)
 - No new features — this is a pure UI/UX redesign
 - No mobile responsiveness (desktop-only app)
 - No animations beyond existing status dot pulse
