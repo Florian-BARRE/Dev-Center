@@ -1,205 +1,187 @@
-import { useEffect, useState } from 'react';
+// ====== Code Summary ======
+// Dashboard — Home page. Stats strip + 2-column grid: project cards (60%) + activity feed (40%).
+
+import React, { useEffect, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { theme } from '../../theme';
+import theme from '../../theme';
 import { listProjects } from '../../api/projects';
-import type { Project } from '../../api/types';
-import ProjectCard from './ProjectCard';
+import { getActivityLog } from '../../api/monitoring';
+import { getTelegramModel } from '../../api/settings';
+import ActivityFeed from '../../components/ActivityFeed';
+import { ProjectCard } from './ProjectCard';
+import type { Project, ActivityEntry, TelegramModelResponse } from '../../api/types';
 
-// ── Skeleton card ─────────────────────────────────────────────────────────────
+const REFRESH_INTERVAL = 15_000;
 
-function SkeletonCard() {
-  return (
-    <div style={{
-      background: theme.colors.surface,
-      border: `1px solid ${theme.colors.border}`,
-      borderRadius: theme.radius.lg,
-      padding: '20px',
-      boxShadow: 'none',
-    }}>
-      {[80, 140, 60, 100].map((w, i) => (
-        <div key={i} style={{
-          height: i === 0 ? '18px' : '12px',
-          width: `${w}%`,
-          maxWidth: `${w * 2.4}px`,
-          marginBottom: '12px',
-          borderRadius: theme.radius.sm,
-          background: `linear-gradient(90deg, ${theme.colors.surfaceElevated} 0%, #1e1e3a 50%, ${theme.colors.surfaceElevated} 100%)`,
-          backgroundSize: '200% 100%',
-          animation: 'shimmer 1.5s infinite',
-        }} />
-      ))}
-    </div>
-  );
-}
+const CONTENT_STYLE: React.CSSProperties = {
+  maxWidth: theme.maxWidth,
+  margin: '0 auto',
+  padding: `${theme.spacing['2xl']} ${theme.spacing.xl}`,
+};
 
-// ── Empty state ───────────────────────────────────────────────────────────────
+/**
+ * Home page — shows a stats strip, a project card grid (60%), and a recent
+ * activity feed (40%). Data refreshes every 15 seconds.
+ */
+export function Dashboard() {
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [telegramModels, setTelegramModels] = useState<Record<string, TelegramModelResponse>>({});
+  const [activity, setActivity] = useState<ActivityEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
 
-function EmptyState() {
-  return (
-    <div style={{
-      display: 'flex',
-      flexDirection: 'column',
-      alignItems: 'center',
-      justifyContent: 'center',
-      paddingTop: '80px',
-      gap: '16px',
-      animation: 'fadeIn 0.3s ease',
-    }}>
-      <div style={{
-        width: '64px', height: '64px',
-        borderRadius: theme.radius.xl,
-        background: theme.colors.surfaceElevated,
-        border: `1px solid ${theme.colors.border}`,
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-      }}>
-        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke={theme.colors.muted} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-          <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
-          <rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
-        </svg>
-      </div>
-      <div style={{ textAlign: 'center' }}>
-        <div style={{ fontFamily: theme.font.display, fontWeight: theme.font.weight.semibold, fontSize: theme.font.size.lg, color: theme.colors.text, marginBottom: '6px' }}>
-          No projects yet
-        </div>
-        <div style={{ fontSize: theme.font.size.md, color: theme.colors.muted }}>
-          Create your first project to get started
-        </div>
-      </div>
-      <Link
-        to="/projects/new"
-        style={{
-          padding: '8px 20px',
-          background: theme.colors.accent,
-          color: theme.colors.onPrimary,
-          borderRadius: theme.radius.md,
-          fontFamily: theme.font.sans,
-          fontWeight: theme.font.weight.semibold,
-          fontSize: theme.font.size.md,
-          textDecoration: 'none',
-          marginTop: '4px',
-        }}
-      >
-        + New Project
-      </Link>
-    </div>
-  );
-}
+  const load = useCallback(async () => {
+    // 1. Fetch projects and activity log in parallel
+    const [projs, acts] = await Promise.all([listProjects(), getActivityLog(20)]);
+    setProjects(projs);
+    setActivity(acts);
 
-// ── Dashboard ─────────────────────────────────────────────────────────────────
-
-export default function Dashboard() {
-  const [projects, setProjects] = useState<Project[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    listProjects()
-      .then((res) => setProjects(res.projects))
-      .catch((e: Error) => setError(e.message));
+    // 2. Fetch telegram model for each project (N+1 — acceptable for small N)
+    const models: Record<string, TelegramModelResponse> = {};
+    await Promise.all(
+      projs.map(async (p) => {
+        try {
+          models[p.groupId] = await getTelegramModel(p.groupId);
+        } catch {
+          // Ignore — project may not have a telegram model configured
+        }
+      })
+    );
+    setTelegramModels(models);
+    setLastUpdated(new Date());
+    setLoading(false);
   }, []);
 
-  const activeCount = projects?.filter((p) => p.bridge !== null).length ?? 0;
+  useEffect(() => {
+    // 1. Initial load
+    load();
+
+    // 2. Set up polling interval
+    const interval = setInterval(load, REFRESH_INTERVAL);
+    return () => clearInterval(interval);
+  }, [load]);
+
+  // Derived stats
+  const activeCount = projects.filter((p) => p.bridge !== null).length;
+  const idleCount = projects.length - activeCount;
+
+  if (loading) {
+    return (
+      <div style={CONTENT_STYLE}>
+        <div style={{ color: theme.colors.muted, fontFamily: theme.font.sans, fontSize: theme.fontSize.sm }}>
+          Loading...
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div style={{
-      padding: '32px',
-      minHeight: '100vh',
-      animation: 'fadeIn 0.3s ease',
-    }}>
-      {/* Page header */}
-      <div style={{
-        display: 'flex',
-        alignItems: 'flex-start',
-        justifyContent: 'space-between',
-        paddingBottom: '24px',
-        borderBottom: `1px solid ${theme.colors.border}`,
-        marginBottom: '24px',
-      }}>
-        <div>
-          <h1 style={{
-            margin: 0,
-            fontFamily: theme.font.display,
-            fontWeight: theme.font.weight.bold,
-            fontSize: theme.font.size.xl,
-            color: theme.colors.text,
-            lineHeight: 1.1,
-          }}>
-            Dashboard
-          </h1>
-          {projects !== null && (
-            <div style={{
-              marginTop: '6px',
-              fontFamily: theme.font.mono,
-              fontSize: theme.font.size.sm,
-              color: theme.colors.muted,
-            }}>
-              — {projects.length} project{projects.length !== 1 ? 's' : ''} · {activeCount} active bridge{activeCount !== 1 ? 's' : ''}
-            </div>
-          )}
-        </div>
-        <Link
-          to="/projects/new"
-          style={{
-            padding: '8px 16px',
-            background: theme.colors.accent,
-            color: theme.colors.onPrimary,
-            borderRadius: theme.radius.md,
-            fontFamily: theme.font.sans,
-            fontWeight: theme.font.weight.semibold,
-            fontSize: theme.font.size.md,
-            textDecoration: 'none',
-            flexShrink: 0,
-          }}
-        >
-          + New Project
-        </Link>
+    <div style={CONTENT_STYLE}>
+      {/* Stats strip */}
+      <div style={{ display: 'flex', gap: theme.spacing.md, marginBottom: theme.spacing['2xl'] }}>
+        <StatChip dot="active" count={activeCount} label="active sessions" />
+        <StatChip dot="idle" count={idleCount} label="idle projects" />
+        <StatChip count={projects.length} label="total projects" />
       </div>
 
-      {/* Error */}
-      {error && (
-        <div style={{
-          padding: '12px 16px',
-          background: theme.colors.dangerBg,
-          border: `1px solid ${theme.colors.danger}44`,
-          borderRadius: theme.radius.md,
-          color: theme.colors.danger,
-          fontSize: theme.font.size.sm,
-          marginBottom: '24px',
-        }}>
-          Failed to load projects: {error}
-        </div>
-      )}
-
-      {/* Loading skeletons */}
-      {projects === null && !error && (
+      {/* Main grid: 60% projects / 40% activity feed */}
+      <div style={{ display: 'grid', gridTemplateColumns: '60% 40%', gap: theme.spacing.xl, alignItems: 'start' }}>
+        {/* Left column: project cards */}
         <div>
-          <span style={{ position: 'absolute', width: '1px', height: '1px', padding: 0, margin: '-1px', overflow: 'hidden', clip: 'rect(0,0,0,0)', whiteSpace: 'nowrap', borderWidth: 0 }}>
-            Loading...
-          </span>
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
-            gap: '16px',
-          }}>
-            {[1, 2, 3].map((i) => <SkeletonCard key={i} />)}
-          </div>
+          <SectionHeader title="PROJECTS">
+            <Link
+              to="/projects/new"
+              style={{ color: theme.colors.textSecondary, fontSize: theme.fontSize.xs, textDecoration: 'none' }}
+            >
+              + New
+            </Link>
+          </SectionHeader>
+          {projects.length === 0 ? (
+            <div style={{ color: theme.colors.muted, fontFamily: theme.font.sans, fontSize: theme.fontSize.sm, padding: `${theme.spacing.xl} 0` }}>
+              Aucun projet — <Link to="/projects/new" style={{ color: theme.colors.text }}>créer le premier →</Link>
+            </div>
+          ) : (
+            projects.map((p) => (
+              <ProjectCard key={p.groupId} project={p} telegramModel={telegramModels[p.groupId]} />
+            ))
+          )}
         </div>
-      )}
 
-      {/* Empty state */}
-      {projects !== null && projects.length === 0 && <EmptyState />}
-
-      {/* Project grid */}
-      {projects !== null && projects.length > 0 && (
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
-          gap: '16px',
-        }}>
-          {projects.map((p) => (
-            <ProjectCard key={p.groupId} project={p} />
-          ))}
+        {/* Right column: recent activity */}
+        <div>
+          <SectionHeader
+            title="RECENT ACTIVITY"
+            right={
+              <span style={{ color: theme.colors.muted, fontSize: theme.fontSize.xs, fontFamily: theme.font.mono }}>
+                {lastUpdated.toLocaleTimeString()}
+              </span>
+            }
+          />
+          <ActivityFeed entries={activity} maxHeight="calc(100vh - 200px)" />
         </div>
-      )}
+      </div>
     </div>
   );
 }
+
+// ── StatChip ──────────────────────────────────────────────────────────────────
+
+interface StatChipProps {
+  dot?: 'active' | 'idle';
+  count: number;
+  label: string;
+}
+
+/**
+ * Small stat pill rendered in the stats strip at the top of the Dashboard.
+ */
+function StatChip({ dot, count, label }: StatChipProps) {
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: '6px',
+      background: theme.colors.surface, border: `1px solid ${theme.colors.border}`,
+      borderRadius: theme.radius.md, padding: '6px 12px',
+      fontFamily: theme.font.sans, fontSize: theme.fontSize.xs, color: theme.colors.textSecondary,
+    }}>
+      {dot === 'active' && <span style={{ color: theme.colors.active }}>●</span>}
+      {dot === 'idle' && <span style={{ color: theme.colors.muted }}>○</span>}
+      <strong style={{ color: theme.colors.text, fontWeight: theme.fontWeight.semibold }}>{count}</strong>
+      {label}
+    </div>
+  );
+}
+
+// ── SectionHeader ─────────────────────────────────────────────────────────────
+
+interface SectionHeaderProps {
+  title: string;
+  children?: React.ReactNode;
+  right?: React.ReactNode;
+}
+
+/**
+ * Thin section header with optional right-aligned content and optional child nodes.
+ */
+function SectionHeader({ title, children, right }: SectionHeaderProps) {
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+      marginBottom: theme.spacing.md, paddingBottom: theme.spacing.sm,
+      borderBottom: `1px solid ${theme.colors.border}`,
+    }}>
+      <span style={{
+        fontFamily: theme.font.sans, fontSize: theme.fontSize.xs,
+        fontWeight: theme.fontWeight.medium, color: theme.colors.muted,
+        textTransform: 'uppercase', letterSpacing: '0.08em',
+      }}>
+        {title}
+      </span>
+      <div style={{ display: 'flex', gap: theme.spacing.sm, alignItems: 'center' }}>
+        {children}
+        {right}
+      </div>
+    </div>
+  );
+}
+
+export default Dashboard;

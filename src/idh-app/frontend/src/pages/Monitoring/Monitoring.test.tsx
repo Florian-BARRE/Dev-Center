@@ -12,9 +12,9 @@ const mockWs = { onopen: null, onmessage: null, onclose: null, onerror: null, cl
 
 describe('MonitoringPage', () => {
   beforeEach(() => {
-    vi.mocked(projectsApi.listProjects).mockResolvedValue({ projects: [] });
+    vi.mocked(projectsApi.listProjects).mockResolvedValue([]);
     vi.mocked(monitoringApi.getTimeline).mockResolvedValue({ projects: [] });
-    vi.mocked(monitoringApi.getActivityLog).mockResolvedValue({ entries: [] });
+    vi.mocked(monitoringApi.getActivityLog).mockResolvedValue([]);
     vi.mocked(monitoringApi.createMonitoringSocket).mockReturnValue(mockWs as unknown as WebSocket);
   });
 

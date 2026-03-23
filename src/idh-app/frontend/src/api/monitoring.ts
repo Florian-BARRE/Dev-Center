@@ -1,12 +1,12 @@
 import { apiFetch } from './client';
-import type { TimelineResponse, ActivityLogResponse } from './types';
+import type { TimelineResponse, ActivityLogResponse, ActivityEntry } from './types';
 
 export function getTimeline(): Promise<TimelineResponse> {
   return apiFetch('/api/v1/monitoring/timeline', { method: 'GET' });
 }
 
-export function getActivityLog(limit = 100): Promise<ActivityLogResponse> {
-  return apiFetch(`/api/v1/monitoring/activity?limit=${limit}`, { method: 'GET' });
+export function getActivityLog(limit = 100): Promise<ActivityEntry[]> {
+  return apiFetch<ActivityLogResponse>(`/api/v1/monitoring/activity?limit=${limit}`, { method: 'GET' }).then((r) => r.entries);
 }
 
 /** Opens a WebSocket to the real-time monitoring event stream. Caller owns lifecycle. */

@@ -118,9 +118,9 @@ export default function MonitoringPage() {
       getTimeline(),
       getActivityLog(200),
     ]).then(([proj, tl, act]) => {
-      setProjects(proj.projects);
+      setProjects(proj);
       setTimeline(tl);
-      setActivityEntries(act.entries);
+      setActivityEntries(act);
       setLastRefresh(new Date());
       setRefreshing(false);
     }).catch((e: Error) => {

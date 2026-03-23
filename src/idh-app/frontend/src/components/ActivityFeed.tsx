@@ -3,6 +3,7 @@ import type { ActivityEntry } from '../api/types';
 
 interface ActivityFeedProps {
   entries: ActivityEntry[];
+  maxHeight?: string;
 }
 
 // Map event type to a display color
@@ -18,7 +19,7 @@ function formatTimestamp(iso: string): string {
   return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 }
 
-export default function ActivityFeed({ entries }: ActivityFeedProps) {
+export default function ActivityFeed({ entries, maxHeight }: ActivityFeedProps) {
   if (entries.length === 0) {
     return (
       <div style={{
@@ -42,7 +43,7 @@ export default function ActivityFeed({ entries }: ActivityFeedProps) {
       border: `1px solid ${theme.colors.border}`,
       borderRadius: theme.radius.lg,
       overflow: 'hidden',
-      maxHeight: '320px',
+      maxHeight: maxHeight ?? '320px',
       overflowY: 'auto',
     }}>
       {entries.map((e, i) => (

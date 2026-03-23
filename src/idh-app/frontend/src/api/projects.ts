@@ -1,8 +1,8 @@
 import { apiFetch } from './client';
 import type { Project, ProjectListResponse, CreateProjectRequest } from './types';
 
-export function listProjects(): Promise<ProjectListResponse> {
-  return apiFetch('/api/v1/projects', { method: 'GET' });
+export function listProjects(): Promise<Project[]> {
+  return apiFetch<ProjectListResponse>('/api/v1/projects', { method: 'GET' }).then((r) => r.projects);
 }
 
 export function getProject(groupId: string): Promise<Project> {

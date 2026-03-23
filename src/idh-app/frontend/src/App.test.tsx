@@ -18,7 +18,7 @@ vi.mock('./pages/Monitoring/MonitoringPage', () => ({
   default: () => <div data-testid="monitoring">Monitoring</div>,
 }));
 vi.mock('./api/projects', () => ({
-  listProjects: vi.fn(() => Promise.resolve({ projects: [] })),
+  listProjects: vi.fn(() => Promise.resolve([])),
 }));
 
 describe('App router', () => {

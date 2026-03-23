@@ -21,11 +21,11 @@ function makeResponse(body: unknown, status = 200) {
 }
 
 describe('projects API', () => {
-  it('listProjects GETs /api/v1/projects', async () => {
+  it('listProjects GETs /api/v1/projects and unwraps .projects', async () => {
     mockFetch.mockReturnValue(makeResponse({ projects: [] }));
     const result = await listProjects();
     expect(mockFetch).toHaveBeenCalledWith('/api/v1/projects', expect.any(Object));
-    expect(result).toEqual({ projects: [] });
+    expect(result).toEqual([]);
   });
 
   it('createProject POSTs with body', async () => {
