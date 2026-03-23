@@ -1,108 +1,75 @@
-// Design system — NEXUS dark command center aesthetic
-// Palette: Electric Cyan primary (#3ddcff), Purple accent (#a78bfa)
-// Typography: Syne (display) + Figtree (body) + JetBrains Mono (code/data)
+// ====== Code Summary ======
+// Design tokens for the IDH App — Linear/Vercel-style ops dashboard.
+// Single source of truth for all colors, typography, spacing, and shadows.
 
 export const theme = {
   colors: {
-    // Backgrounds
-    bg:              '#060610',   // near-black with blue tint
-    surface:         '#0d0d1a',   // cards and panels
-    surfaceElevated: '#14142a',   // elevated panels / modals
-    surfaceHover:    '#1a1a32',   // hover target overlay
+    bg: '#0a0a0a',
+    surface: '#111111',
+    surfaceHover: '#161616',
+    border: '#222222',
+    borderStrong: '#333333',
 
-    // Borders
-    border:          '#1e1e3a',   // default border
-    borderSubtle:    '#14142a',   // subtle separator (kept for backward compat)
-    borderAccent:    '#2d2d55',   // interactive / focused border
+    text: '#fafafa',
+    textSecondary: '#a1a1aa',
+    muted: '#52525b',
 
-    // Brand — electric cyan
-    primary:         '#3ddcff',   // alias for accent (used by existing components)
-    primaryHover:    '#1fbfe0',
-    primaryDim:      '#0a3a4a',   // background behind accent elements
-    accent:          '#3ddcff',   // electric cyan — PRIMARY signature
-    accentDim:       '#0a3a4a',   // background behind accent elements
-    accentGlow:      'rgba(61,220,255,0.12)',
+    accent: '#ffffff',
+    accentHover: '#e4e4e7',
 
-    // Secondary accent — purple
-    purple:          '#a78bfa',
-    purpleDim:       '#2d1f5e',
+    active: '#22c55e',
+    activeGlow: 'rgba(34, 197, 94, 0.15)',
+    warning: '#f97316',
+    danger: '#ef4444',
 
-    // Semantic
-    success:         '#22ddaa',
-    successBg:       '#081f18',
-    warning:         '#ffb340',
-    warningBg:       '#1f1500',
-    danger:          '#ff4070',
-    dangerBg:        '#1f0012',
-
-    // Text
-    text:            '#e0e0f5',   // primary text
-    textSecondary:   '#8888aa',   // secondary text
-    muted:           '#555570',   // captions, placeholders
-    link:            '#3ddcff',
-    onPrimary:       '#060610',   // text on cyan bg
-
-    // Terminal
-    terminalBg:      '#02020a',
+    nav: '#111111',
+    navBorder: '#1f1f1f',
   },
-  spacing: {
-    xs:   '4px',
-    sm:   '8px',
-    md:   '12px',
-    lg:   '16px',
-    xl:   '24px',
-    xxl:  '32px',
-    xxxl: '48px',
-  },
+
   font: {
-    sans:    "'Figtree', sans-serif",
-    display: "'Syne', sans-serif",
-    mono:    "'JetBrains Mono', monospace",
-    size: {
-      xs:      '11px',
-      sm:      '12px',
-      base:    '13px',
-      md:      '14px',
-      lg:      '16px',
-      xl:      '20px',
-      xxl:     '28px',
-      display: '36px',
-      // Legacy aliases kept so existing components don't break
-      xxxl:    '32px',
-    },
-    weight: {
-      normal:   400,
-      medium:   500,
-      semibold: 600,
-      bold:     700,
-      extrabold: 800,
-    } as const,
+    sans: "'Inter', sans-serif",
+    mono: "'JetBrains Mono', monospace",
   },
+
+  fontSize: {
+    xs: '11px',
+    sm: '12px',
+    base: '13px',
+    md: '14px',
+    lg: '16px',
+    xl: '20px',
+    '2xl': '24px',
+  },
+
+  fontWeight: {
+    normal: 400,
+    medium: 500,
+    semibold: 600,
+  },
+
+  spacing: {
+    xs: '4px',
+    sm: '8px',
+    md: '12px',
+    lg: '16px',
+    xl: '24px',
+    '2xl': '32px',
+    '3xl': '48px',
+  },
+
   radius: {
-    sm:   '4px',
-    md:   '6px',
-    lg:   '10px',
-    xl:   '16px',
+    sm: '3px',
+    md: '6px',
+    lg: '8px',
     full: '9999px',
   },
-  shadow: {
-    card:   '0 4px 24px rgba(0,0,0,0.4)',
-    accent: '0 0 0 1px #3ddcff, 0 0 16px rgba(61,220,255,0.15)',
-    glow:   '0 0 20px rgba(61,220,255,0.2)',
-    // Legacy aliases
-    sm:     '0 1px 2px rgba(0,0,0,0.4)',
-    md:     '0 4px 12px rgba(0,0,0,0.5)',
-    lg:     '0 8px 32px rgba(0,0,0,0.6)',
+
+  nav: {
+    height: '48px',
   },
-  sidebar: {
-    width: '240px',
-  },
-  transition: {
-    fast:   'all 0.15s ease',
-    base:   'all 0.2s ease',
-    // Legacy alias
-    normal: 'all 0.2s ease',
-  },
+
+  maxWidth: '1200px',
 } as const;
 
 export type Theme = typeof theme;
+export default theme;
