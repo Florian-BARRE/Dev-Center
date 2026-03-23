@@ -15,6 +15,17 @@ function formatRemaining(ms: number): string {
   return `${s}s`;
 }
 
+// Thresholds in milliseconds
+const TWO_HOURS     = 2 * 60 * 60 * 1_000;
+const THIRTY_MINS   = 30 * 60 * 1_000;
+
+function remainingColor(ms: number): string {
+  if (ms <= 0)             return theme.colors.muted;
+  if (ms < THIRTY_MINS)   return theme.colors.warning;
+  if (ms < TWO_HOURS)     return theme.colors.text;
+  return theme.colors.textSecondary;
+}
+
 export default function CountdownTimer({ expiresAt }: CountdownTimerProps) {
   const [remaining, setRemaining] = useState(() => new Date(expiresAt).getTime() - Date.now());
 
@@ -27,20 +38,12 @@ export default function CountdownTimer({ expiresAt }: CountdownTimerProps) {
     return () => clearInterval(id);
   }, [expiresAt]);
 
-  const isExpired = remaining <= 0;
-  const isWarning = remaining > 0 && remaining < 60 * 60 * 1000; // < 1h
-
   return (
     <span
       style={{
         fontFamily: theme.font.mono,
-        fontSize: theme.font.size.md,
-        color: isExpired
-          ? theme.colors.danger
-          : isWarning
-          ? theme.colors.warning
-          : theme.colors.text,
-        fontWeight: isWarning || isExpired ? theme.font.weight.semibold : theme.font.weight.normal,
+        fontSize: theme.fontSize.base,
+        color: remainingColor(remaining),
       }}
     >
       {formatRemaining(remaining)}

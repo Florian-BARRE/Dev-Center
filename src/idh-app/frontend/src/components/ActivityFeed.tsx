@@ -5,16 +5,13 @@ interface ActivityFeedProps {
   entries: ActivityEntry[];
 }
 
-function levelColor(level: ActivityEntry['level']): string {
-  if (level === 'warning') return theme.colors.warning;
-  if (level === 'error')   return theme.colors.danger;
-  return theme.colors.muted;
-}
-
-function levelDot(level: ActivityEntry['level']): string {
-  if (level === 'warning') return theme.colors.warning;
-  if (level === 'error')   return theme.colors.danger;
-  return theme.colors.success;
+// Map event type to a display color
+function eventTypeColor(event: string): string {
+  if (event === 'session_started' || event === 'session_renewed') return theme.colors.active;
+  if (event === 'warning_sent')                                    return theme.colors.warning;
+  if (event === 'session_stopped' || event === 'error')            return theme.colors.danger;
+  if (event === 'project_created')                                 return theme.colors.text;
+  return theme.colors.textSecondary;
 }
 
 function formatTimestamp(iso: string): string {
@@ -28,7 +25,8 @@ export default function ActivityFeed({ entries }: ActivityFeedProps) {
         padding: '24px 16px',
         textAlign: 'center',
         color: theme.colors.muted,
-        fontSize: theme.font.size.sm,
+        fontSize: theme.fontSize.sm,
+        fontFamily: theme.font.sans,
         background: theme.colors.surface,
         border: `1px solid ${theme.colors.border}`,
         borderRadius: theme.radius.lg,
@@ -40,45 +38,56 @@ export default function ActivityFeed({ entries }: ActivityFeedProps) {
 
   return (
     <div style={{
-      background: theme.colors.terminalBg,
+      background: theme.colors.surface,
       border: `1px solid ${theme.colors.border}`,
       borderRadius: theme.radius.lg,
       overflow: 'hidden',
       maxHeight: '320px',
       overflowY: 'auto',
-      boxShadow: theme.shadow.card,
     }}>
       {entries.map((e, i) => (
         <div
           key={i}
           style={{
-            display: 'grid',
-            gridTemplateColumns: '80px 12px 120px 1fr',
-            gap: '10px',
-            padding: '6px 14px',
-            borderBottom: i < entries.length - 1 ? `1px solid ${theme.colors.border}22` : 'none',
+            display: 'flex',
+            gap: '12px',
+            padding: '6px 0',
+            borderBottom: `1px solid ${theme.colors.border}`,
             alignItems: 'center',
+            paddingLeft: '14px',
+            paddingRight: '14px',
           }}
         >
-          <span style={{ fontSize: theme.font.size.xs, fontFamily: theme.font.mono, color: `${theme.colors.muted}88` }}>
+          {/* Timestamp */}
+          <span style={{
+            fontSize: theme.fontSize.xs,
+            fontFamily: theme.font.mono,
+            color: theme.colors.muted,
+            flexShrink: 0,
+          }}>
             {formatTimestamp(e.timestamp)}
           </span>
+
+          {/* Event type */}
           <span style={{
-            width: '5px', height: '5px', borderRadius: '50%',
-            background: levelDot(e.level), display: 'inline-block', flexShrink: 0,
-          }} />
+            fontSize: theme.fontSize.sm,
+            fontFamily: theme.font.sans,
+            color: eventTypeColor(e.event),
+            flexShrink: 0,
+          }}>
+            {e.event}
+          </span>
+
+          {/* Project name */}
           <span style={{
-            fontSize: theme.font.size.xs,
+            fontSize: theme.fontSize.xs,
+            fontFamily: theme.font.mono,
             color: theme.colors.textSecondary,
             overflow: 'hidden',
             textOverflow: 'ellipsis',
             whiteSpace: 'nowrap',
-            fontFamily: theme.font.mono,
           }}>
             {e.projectId}
-          </span>
-          <span style={{ fontSize: theme.font.size.xs, color: levelColor(e.level) }}>
-            {e.event}
           </span>
         </div>
       ))}

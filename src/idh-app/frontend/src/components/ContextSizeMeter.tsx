@@ -10,14 +10,15 @@ function formatTokens(n: number): string {
   return n.toLocaleString('en-US');
 }
 
+function fillColor(pct: number): string {
+  if (pct > 80) return theme.colors.danger;
+  if (pct >= 60) return theme.colors.warning;
+  return theme.colors.active;
+}
+
 export default function ContextSizeMeter({ response }: ContextSizeMeterProps) {
   const pct = Math.round((response.total / response.estimatedMax) * 100);
-
-  // 1. Pick fill color based on percentage
-  const fillColor =
-    pct > 80 ? theme.colors.danger :
-    pct > 50 ? theme.colors.warning :
-    theme.colors.success;
+  const color = fillColor(pct);
 
   const breakdown = [
     { label: 'CLAUDE.md',      tokens: response.claudeMd },
@@ -30,16 +31,16 @@ export default function ContextSizeMeter({ response }: ContextSizeMeterProps) {
       {/* Header row */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
         <span style={{
-          fontSize: '10px',
+          fontSize: theme.fontSize.sm,
           fontFamily: theme.font.sans,
-          color: theme.colors.muted,
+          color: theme.colors.textSecondary,
           textTransform: 'uppercase',
           letterSpacing: '0.1em',
-          fontWeight: theme.font.weight.semibold,
+          fontWeight: theme.fontWeight.medium,
         }}>
           Context budget
         </span>
-        <span style={{ fontSize: theme.font.size.xs, fontFamily: theme.font.mono, color: theme.colors.text }}>
+        <span style={{ fontSize: theme.fontSize.sm, fontFamily: theme.font.mono, color: theme.colors.textSecondary }}>
           {formatTokens(response.total)} / ~{formatTokens(response.estimatedMax)} tokens
         </span>
       </div>
@@ -47,27 +48,31 @@ export default function ContextSizeMeter({ response }: ContextSizeMeterProps) {
       {/* Progress bar */}
       <div style={{
         height: '5px',
-        background: theme.colors.surfaceElevated,
+        background: theme.colors.border,
         borderRadius: theme.radius.full,
         overflow: 'hidden',
       }}>
         <div style={{
           height: '100%',
           width: `${Math.min(pct, 100)}%`,
-          background: fillColor,
+          background: color,
           borderRadius: theme.radius.full,
           transition: 'width 0.3s ease',
-          boxShadow: `0 0 6px ${fillColor}66`,
         }} />
       </div>
 
       {/* Percentage + breakdown */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-        <span style={{ fontSize: theme.font.size.xs, fontFamily: theme.font.mono, color: fillColor, fontWeight: theme.font.weight.semibold }}>
+        <span style={{
+          fontSize: theme.fontSize.md,
+          fontFamily: theme.font.mono,
+          color: color,
+          fontWeight: theme.fontWeight.semibold,
+        }}>
           {pct}%
         </span>
         {breakdown.map((b) => (
-          <span key={b.label} style={{ fontSize: theme.font.size.xs, color: theme.colors.muted }}>
+          <span key={b.label} style={{ fontSize: theme.fontSize.sm, fontFamily: theme.font.sans, color: theme.colors.textSecondary }}>
             {b.label}{' '}
             <span style={{ color: theme.colors.textSecondary, fontFamily: theme.font.mono }}>
               {formatTokens(b.tokens)}

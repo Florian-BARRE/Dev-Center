@@ -1,11 +1,12 @@
 import { theme } from '../theme';
 
-type Status = 'active' | 'idle' | 'warning';
+type Status = 'active' | 'idle' | 'warning' | 'error';
 
-const STATUS_CONFIG: Record<Status, { label: string; color: string; bg: string; pulse: boolean }> = {
-  active:  { label: 'Active',  color: theme.colors.success, bg: theme.colors.successBg, pulse: true },
-  idle:    { label: 'Idle',    color: theme.colors.muted,   bg: theme.colors.surfaceElevated, pulse: false },
-  warning: { label: 'Warning', color: theme.colors.warning, bg: theme.colors.warningBg, pulse: false },
+const STATUS_CONFIG: Record<Status, { label: string; color: string; pulse: boolean }> = {
+  active:  { label: 'SESSION ACTIVE', color: theme.colors.active,  pulse: true  },
+  idle:    { label: 'IDLE',           color: theme.colors.muted,   pulse: false },
+  warning: { label: 'WARN',           color: theme.colors.warning, pulse: false },
+  error:   { label: 'ERROR',          color: theme.colors.danger,  pulse: false },
 };
 
 interface StatusBadgeProps {
@@ -22,14 +23,14 @@ export default function StatusBadge({ status }: StatusBadgeProps) {
         gap: '5px',
         padding: '2px 8px',
         borderRadius: theme.radius.sm,
-        fontSize: '10px',
-        fontWeight: theme.font.weight.semibold,
-        fontFamily: theme.font.mono,
+        fontSize: theme.fontSize.xs,
+        fontWeight: theme.fontWeight.medium,
+        fontFamily: theme.font.sans,
         color: cfg.color,
-        background: cfg.bg,
-        border: `1px solid ${cfg.color}40`,
+        background: cfg.color + '1a',
+        border: `1px solid ${cfg.color}33`,
         textTransform: 'uppercase',
-        letterSpacing: '0.06em',
+        letterSpacing: '0.05em',
       }}
     >
       <span style={{

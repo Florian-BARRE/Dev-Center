@@ -11,18 +11,14 @@ interface WsEvent {
 
 const MAX_EVENTS = 200;
 
-// Colour mapping for event type prefixes
-const EVENT_COLORS: Record<string, string> = {
-  session:    theme.colors.accent,
-  scheduler:  theme.colors.warning,
-  summarizer: '#38bdf8',           // info blue — not in theme palette
-  memory:     theme.colors.success,
-  error:      theme.colors.danger,
-};
-
+// Map event type prefix to a display color using new theme tokens
 function eventColor(type: string): string {
   const prefix = type.split('.')[0];
-  return EVENT_COLORS[prefix] ?? theme.colors.muted;
+  if (prefix === 'session')    return theme.colors.active;
+  if (prefix === 'scheduler')  return theme.colors.warning;
+  if (prefix === 'error')      return theme.colors.danger;
+  if (prefix === 'memory')     return theme.colors.textSecondary;
+  return theme.colors.muted;
 }
 
 export default function EventFeed() {
@@ -87,7 +83,6 @@ export default function EventFeed() {
       border: `1px solid ${theme.colors.border}`,
       borderRadius: theme.radius.lg,
       overflow: 'hidden',
-      boxShadow: theme.shadow.card,
     }}>
       {/* Header */}
       <div style={{
@@ -96,13 +91,13 @@ export default function EventFeed() {
         alignItems: 'center',
         padding: '8px 16px',
         borderBottom: `1px solid ${theme.colors.border}`,
-        background: theme.colors.surfaceElevated,
+        background: theme.colors.surface,
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <span style={{
-            fontSize: theme.font.size.sm,
+            fontSize: theme.fontSize.sm,
             fontFamily: theme.font.sans,
-            fontWeight: theme.font.weight.semibold,
+            fontWeight: theme.fontWeight.semibold,
             color: theme.colors.text,
           }}>
             Live Events
@@ -112,12 +107,12 @@ export default function EventFeed() {
             width: '6px',
             height: '6px',
             borderRadius: '50%',
-            background: connected ? theme.colors.success : theme.colors.muted,
+            background: connected ? theme.colors.active : theme.colors.muted,
             display: 'inline-block',
             transition: 'background 0.3s',
           }} />
           <span style={{
-            fontSize: theme.font.size.xs,
+            fontSize: theme.fontSize.xs,
             fontFamily: theme.font.mono,
             color: theme.colors.muted,
           }}>
@@ -133,7 +128,7 @@ export default function EventFeed() {
             borderRadius: theme.radius.md,
             color: theme.colors.muted,
             cursor: 'pointer',
-            fontSize: theme.font.size.xs,
+            fontSize: theme.fontSize.xs,
             fontFamily: theme.font.sans,
           }}
         >
@@ -146,14 +141,14 @@ export default function EventFeed() {
         maxHeight: '360px',
         overflowY: 'auto',
         fontFamily: theme.font.mono,
-        fontSize: theme.font.size.xs,
+        fontSize: theme.fontSize.xs,
       }}>
         {events.length === 0 ? (
           <div style={{
             padding: '24px 16px',
             color: theme.colors.muted,
             fontFamily: theme.font.sans,
-            fontSize: theme.font.size.sm,
+            fontSize: theme.fontSize.sm,
             fontStyle: 'italic',
           }}>
             Waiting for events\u2026
@@ -164,27 +159,29 @@ export default function EventFeed() {
               key={i}
               style={{
                 display: 'flex',
+                gap: '12px',
+                padding: '6px 0',
+                borderBottom: `1px solid ${theme.colors.border}`,
                 alignItems: 'flex-start',
-                gap: '10px',
-                padding: '6px 16px',
-                borderBottom: `1px solid ${theme.colors.border}22`,
+                paddingLeft: '16px',
+                paddingRight: '16px',
               }}
             >
               {/* Timestamp */}
               <span style={{
                 color: theme.colors.muted,
+                fontFamily: theme.font.mono,
+                fontSize: theme.fontSize.xs,
                 whiteSpace: 'nowrap',
                 flexShrink: 0,
-                paddingTop: '1px',
               }}>
                 {new Date(ev.ts).toLocaleTimeString()}
               </span>
 
-              {/* Event type badge */}
+              {/* Event type */}
               <span style={{
-                padding: '1px 6px',
-                borderRadius: theme.radius.sm,
-                background: `${eventColor(ev.type)}22`,
+                fontFamily: theme.font.sans,
+                fontSize: theme.fontSize.sm,
                 color: eventColor(ev.type),
                 whiteSpace: 'nowrap',
                 flexShrink: 0,
@@ -192,9 +189,14 @@ export default function EventFeed() {
                 {ev.type}
               </span>
 
-              {/* Group ID (optional) */}
+              {/* Group ID (project name) */}
               {ev.group_id && (
-                <span style={{ color: theme.colors.textSecondary, flexShrink: 0 }}>
+                <span style={{
+                  fontFamily: theme.font.mono,
+                  fontSize: theme.fontSize.xs,
+                  color: theme.colors.textSecondary,
+                  flexShrink: 0,
+                }}>
                   {ev.group_id}
                 </span>
               )}

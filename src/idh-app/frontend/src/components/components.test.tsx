@@ -3,21 +3,27 @@ import { vi } from 'vitest';
 import StatusBadge from './StatusBadge';
 import CountdownTimer from './CountdownTimer';
 import ModelSelector from './ModelSelector';
+import { TimeRangeScheduler } from './TimeRangeScheduler';
 
 describe('StatusBadge', () => {
-  it('renders "Active" for active status', () => {
+  it('renders "SESSION ACTIVE" for active status', () => {
     render(<StatusBadge status="active" />);
-    expect(screen.getByText('Active')).toBeInTheDocument();
+    expect(screen.getByText('SESSION ACTIVE')).toBeInTheDocument();
   });
 
-  it('renders "Idle" for idle status', () => {
+  it('renders "IDLE" for idle status', () => {
     render(<StatusBadge status="idle" />);
-    expect(screen.getByText('Idle')).toBeInTheDocument();
+    expect(screen.getByText('IDLE')).toBeInTheDocument();
   });
 
-  it('renders "Warning" for warning status', () => {
+  it('renders "WARN" for warning status', () => {
     render(<StatusBadge status="warning" />);
-    expect(screen.getByText('Warning')).toBeInTheDocument();
+    expect(screen.getByText('WARN')).toBeInTheDocument();
+  });
+
+  it('renders "ERROR" for error status', () => {
+    render(<StatusBadge status="error" />);
+    expect(screen.getByText('ERROR')).toBeInTheDocument();
   });
 });
 
@@ -63,5 +69,31 @@ describe('ModelSelector', () => {
     );
     const select = screen.getByRole('combobox') as HTMLSelectElement;
     expect(select.value).toBe('anthropic|claude-sonnet-4-6');
+  });
+});
+
+describe('TimeRangeScheduler', () => {
+  it('renders an add range button when ranges are empty', () => {
+    const { getByText } = render(
+      <TimeRangeScheduler
+        value={{ enabled: true, ranges: [], days: [] }}
+        onChange={() => {}}
+      />
+    );
+    expect(getByText(/ajouter une plage/i)).toBeInTheDocument();
+  });
+
+  it('calls onChange when a range is removed', () => {
+    const onChange = vi.fn();
+    const { getAllByTitle } = render(
+      <TimeRangeScheduler
+        value={{ enabled: true, ranges: [{ start: '08:00', end: '20:00' }], days: [] }}
+        onChange={onChange}
+      />
+    );
+    getAllByTitle(/supprimer/i)[0]?.click();
+    expect(onChange).toHaveBeenCalledWith(
+      expect.objectContaining({ ranges: [] })
+    );
   });
 });
