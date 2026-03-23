@@ -14,7 +14,7 @@ function SkeletonCard() {
       border: `1px solid ${theme.colors.border}`,
       borderRadius: theme.radius.lg,
       padding: '20px',
-      boxShadow: theme.shadow.card,
+      boxShadow: 'none',
     }}>
       {[80, 140, 60, 100].map((w, i) => (
         <div key={i} style={{

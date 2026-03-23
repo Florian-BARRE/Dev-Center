@@ -14,7 +14,7 @@ function SectionCard({ title, children }: { title: string; children: React.React
       border: `1px solid ${theme.colors.border}`,
       borderRadius: theme.radius.lg,
       overflow: 'hidden',
-      boxShadow: theme.shadow.card,
+      boxShadow: 'none',
     }}>
       <div style={{
         padding: '8px 16px',

@@ -24,23 +24,28 @@ interface Props {
 }
 
 const DAYS = [
-  { key: 'mon', label: 'L' },
-  { key: 'tue', label: 'M' },
-  { key: 'wed', label: 'M' },
-  { key: 'thu', label: 'J' },
-  { key: 'fri', label: 'V' },
-  { key: 'sat', label: 'S' },
-  { key: 'sun', label: 'D' },
+  { key: 'mon', label: 'Mo' },
+  { key: 'tue', label: 'Tu' },
+  { key: 'wed', label: 'We' },
+  { key: 'thu', label: 'Th' },
+  { key: 'fri', label: 'Fr' },
+  { key: 'sat', label: 'Sa' },
+  { key: 'sun', label: 'Su' },
 ];
+
+const ALL_DAY_KEYS = DAYS.map(d => d.key);
 
 const MAX_RANGES = 3;
 
 export function TimeRangeScheduler({ value, onChange, disabled }: Props) {
   const toggleDay = (day: string) => {
-    const days = value.days.includes(day)
-      ? value.days.filter(d => d !== day)
-      : [...value.days, day];
-    onChange({ ...value, days });
+    // When days is empty, it means all days are active — expand before toggling
+    const current = value.days.length === 0 ? ALL_DAY_KEYS : value.days;
+    const days = current.includes(day)
+      ? current.filter(d => d !== day)
+      : [...current, day];
+    // If all days selected again, normalize back to empty array (canonical "all days" state)
+    onChange({ ...value, days: days.length === ALL_DAY_KEYS.length ? [] : days });
   };
 
   const addRange = () => {
@@ -79,7 +84,7 @@ export function TimeRangeScheduler({ value, onChange, disabled }: Props) {
     fontFamily: theme.font.sans,
     fontSize: theme.fontSize.xs,
     fontWeight: theme.fontWeight.medium,
-    width: '28px', height: '28px',
+    width: '32px', height: '28px',
     border: `1px solid ${active ? theme.colors.text : theme.colors.border}`,
     borderRadius: theme.radius.sm,
     background: active ? theme.colors.borderStrong : 'transparent',
@@ -105,7 +110,7 @@ export function TimeRangeScheduler({ value, onChange, disabled }: Props) {
               disabled={disabled}
             />
             <button
-              title="Supprimer cette plage"
+              title="Remove this range"
               onClick={() => removeRange(i)}
               disabled={disabled}
               style={{
@@ -131,7 +136,7 @@ export function TimeRangeScheduler({ value, onChange, disabled }: Props) {
               width: '100%',
             }}
           >
-            + Ajouter une plage
+            + Add a range
           </button>
         )}
       </div>
@@ -143,7 +148,7 @@ export function TimeRangeScheduler({ value, onChange, disabled }: Props) {
           color: theme.colors.muted, marginBottom: theme.spacing.sm,
           textTransform: 'uppercase', letterSpacing: '0.05em',
         }}>
-          Jours actifs {value.days.length === 0 && '(tous)'}
+          Active days {value.days.length === 0 && '(all)'}
         </div>
         <div style={{ display: 'flex', gap: theme.spacing.xs }}>
           {DAYS.map(({ key, label }) => (

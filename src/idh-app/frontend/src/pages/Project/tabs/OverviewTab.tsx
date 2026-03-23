@@ -23,7 +23,7 @@ function InfoCard({ title, accent, children }: { title: string; accent?: string;
       border: `1px solid ${accent ? accent + '33' : theme.colors.border}`,
       borderRadius: theme.radius.lg,
       padding: '16px',
-      boxShadow: theme.shadow.card,
+      boxShadow: 'none',
     }}>
       <div style={{
         fontSize: '10px',

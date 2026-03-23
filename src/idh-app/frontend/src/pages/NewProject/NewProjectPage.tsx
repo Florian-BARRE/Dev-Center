@@ -46,7 +46,7 @@ function StepIndicator({ current }: { current: Step }) {
               fontFamily: theme.font.mono,
               fontWeight: theme.font.weight.semibold,
               flexShrink: 0,
-              boxShadow: isActive ? theme.shadow.accent : 'none',
+              boxShadow: 'none',
               transition: theme.transition.base,
             }}>
               {isDone ? '✓' : s.label}
@@ -164,7 +164,7 @@ export default function NewProjectPage() {
           border: `1px solid ${theme.colors.border}`,
           borderRadius: theme.radius.xl,
           padding: '24px',
-          boxShadow: theme.shadow.card,
+          boxShadow: 'none',
         }}>
           {/* Step label */}
           <div style={{

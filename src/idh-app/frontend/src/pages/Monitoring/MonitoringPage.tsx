@@ -24,7 +24,7 @@ function StatCard({ label, value, sub, accent, icon }: StatCardProps) {
       display: 'flex',
       alignItems: 'center',
       gap: '14px',
-      boxShadow: theme.shadow.card,
+      boxShadow: 'none',
     }}>
       <div style={{
         width: '38px', height: '38px',
@@ -74,7 +74,7 @@ function Panel({ title, children, action }: { title: string; children: ReactNode
       border: `1px solid ${theme.colors.border}`,
       borderRadius: theme.radius.lg,
       overflow: 'hidden',
-      boxShadow: theme.shadow.card,
+      boxShadow: 'none',
     }}>
       <div style={{
         display: 'flex',

@@ -111,7 +111,7 @@ export default function ProjectCard({ project }: ProjectCardProps) {
         display: 'flex',
         flexDirection: 'column',
         gap: '10px',
-        boxShadow: hovered ? theme.shadow.card : '0 2px 8px rgba(0,0,0,0.25)',
+        boxShadow: 'none',
         transform: hovered ? 'translateY(-1px)' : 'translateY(0)',
         transition: theme.transition.base,
         cursor: 'default',

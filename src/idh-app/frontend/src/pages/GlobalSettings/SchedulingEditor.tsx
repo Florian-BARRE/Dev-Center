@@ -56,7 +56,7 @@ export default function SchedulingEditor() {
         border: `1px solid ${theme.colors.border}`,
         borderRadius: theme.radius.lg,
         padding: '16px',
-        boxShadow: theme.shadow.card,
+        boxShadow: 'none',
       }}>
         <ScheduleEditor value={config} onChange={setConfig} />
       </div>

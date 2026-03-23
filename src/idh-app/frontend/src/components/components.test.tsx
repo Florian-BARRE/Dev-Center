@@ -80,7 +80,7 @@ describe('TimeRangeScheduler', () => {
         onChange={() => {}}
       />
     );
-    expect(getByText(/ajouter une plage/i)).toBeInTheDocument();
+    expect(getByText(/add a range/i)).toBeInTheDocument();
   });
 
   it('calls onChange when a range is removed', () => {
@@ -91,7 +91,7 @@ describe('TimeRangeScheduler', () => {
         onChange={onChange}
       />
     );
-    getAllByTitle(/supprimer/i)[0]?.click();
+    getAllByTitle(/remove/i)[0]?.click();
     expect(onChange).toHaveBeenCalledWith(
       expect.objectContaining({ ranges: [] })
     );
