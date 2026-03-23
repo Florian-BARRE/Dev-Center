@@ -49,7 +49,7 @@ class SchedulerService(LoggerClass):
         _bridge_manager (BridgeManager): Bridge lifecycle control.
         _global_config_manager (GlobalConfigManager): Global schedule defaults.
         _activity_log (ActivityLog): Event log for the monitoring page.
-        _telegram_notifier (TelegramNotifier): Sends Telegram alerts.
+        _telegram_notifier (TelegramNotifier): Reserved for pre-start warning notifications (deferred feature — not yet called).
         _workspaces_dir (pathlib.Path): Base dir for project workspaces.
         _event_bus (EventBus | None): Optional event bus for publishing real-time events.
     """
@@ -81,6 +81,7 @@ class SchedulerService(LoggerClass):
         self._bridge_manager = bridge_manager
         self._global_config_manager = global_config_manager
         self._activity_log = activity_log
+        # Reserved for pre-start warning notifications — not yet called (deferred feature)
         self._telegram_notifier = telegram_notifier
         self._workspaces_dir = workspaces_dir
         self._event_bus: "EventBus | None" = event_bus
@@ -174,26 +175,6 @@ class SchedulerService(LoggerClass):
                     return True
 
         return False
-
-    def _format_remaining_from_iso(self, expires_at: str) -> str:
-        """
-        Format the remaining time until an ISO-8601 UTC expiry string.
-
-        Args:
-            expires_at (str): ISO-8601 UTC expiry timestamp.
-
-        Returns:
-            str: Human-readable remaining time string.
-        """
-        # 1. Parse UTC timestamp and compute delta
-        expires = datetime.datetime.fromisoformat(expires_at)
-        now = datetime.datetime.now(datetime.UTC)
-        delta = expires - now
-        total_minutes = max(0, int(delta.total_seconds() // 60))
-        hours, minutes = divmod(total_minutes, 60)
-        if hours > 0:
-            return f"{hours}h {minutes}min"
-        return f"{minutes} minutes"
 
     # ──────────────────────────── Scheduler loop ────────────────────────────
 
