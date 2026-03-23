@@ -5,8 +5,10 @@
 # ====== Standard Library Imports ======
 from __future__ import annotations
 
+from typing import Any
+
 # ====== Third-Party Library Imports ======
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, model_validator
 from pydantic.alias_generators import to_camel
 
 
@@ -33,12 +35,15 @@ class BridgeState(_CamelModel):
         workspace (str): Absolute path to the workspace directory.
         expires_at (str): ISO-8601 UTC timestamp when the bridge expires.
         auto_renew (bool): Whether the bridge should be automatically renewed on expiry.
+        scheduled_session (bool): True when this session was started by the scheduler,
+            so the scheduler knows which sessions it owns and can stop them on range exit.
     """
 
     pid: int
     workspace: str
     expires_at: str
     auto_renew: bool = False
+    scheduled_session: bool = False
 
 
 class ModelOverride(_CamelModel):
@@ -54,33 +59,65 @@ class ModelOverride(_CamelModel):
     model: str
 
 
+class TimeRange(_CamelModel):
+    """
+    A single active time range for session scheduling.
+
+    Attributes:
+        start (str): Range start time in HH:MM 24h format.
+        end (str): Range end time in HH:MM 24h format. "00:00" means midnight (end of day).
+    """
+
+    start: str
+    end: str
+
+
 class ScheduleConfig(_CamelModel):
     """
     Session scheduling configuration for one project (or global defaults).
 
-    The schedule defines specific HH:MM times at which the bridge is automatically
-    renewed or started. Warnings are sent ``warn_lead_minutes`` before each renewal.
+    Defines time ranges during which the session code should be active.
+    The backend starts the session on range entry and stops it on range exit.
 
     Attributes:
         enabled (bool): Whether scheduling is active.
-        renewal_times (list[str]): HH:MM 24h times to auto-renew the bridge,
-            e.g. ["08:00", "16:00"].
-        days (list[str]): Days when the schedule is active — subset of
-            ["mon","tue","wed","thu","fri","sat","sun"]. Empty list means all days.
-        warn_lead_minutes (int): Send warning N minutes before each renewal time.
-        warn_interval_minutes (int): Resend warning every N minutes.
-        alert_template (str): Telegram message template; use {remaining} placeholder.
+        ranges (list[TimeRange]): Time windows during which the session is active.
+        days (list[str]): Active days — subset of ["mon","tue","wed","thu","fri","sat","sun"].
+            Empty list means all days.
     """
 
     enabled: bool = False
-    renewal_times: list[str] = []
+    ranges: list[TimeRange] = []
     days: list[str] = []
-    warn_lead_minutes: int = 30
-    warn_interval_minutes: int = 10
-    alert_template: str = (
-        "⏰ Session renewing in {remaining}. Ready? "
-        "[✅ Now] [⏳ +30 min] [🔄 Later]"
-    )
+
+    @model_validator(mode="before")
+    @classmethod
+    def _migrate_old_format(cls, data: Any) -> Any:
+        """
+        Transparently migrate persisted state from the old renewal_times format.
+
+        Old keys detected: renewalTimes (camelCase) or renewal_times (snake_case).
+        Migration: each renewal time becomes a range with start=time, end="00:00".
+        Old-only keys (warnLeadMinutes, warnIntervalMinutes, alertTemplate) are discarded.
+
+        Args:
+            data (Any): Raw input data before model construction.
+
+        Returns:
+            Any: Migrated data dict if old format was detected, otherwise data unchanged.
+        """
+        if not isinstance(data, dict):
+            return data
+        # Detect old format by presence of renewal_times or renewalTimes
+        old_times = data.get("renewalTimes") or data.get("renewal_times")
+        if old_times is not None:
+            migrated_ranges = [{"start": t, "end": "00:00"} for t in old_times]
+            return {
+                "enabled": data.get("enabled", False),
+                "ranges": migrated_ranges,
+                "days": data.get("days", []),
+            }
+        return data
 
 
 class Project(_CamelModel):
@@ -167,6 +204,7 @@ class ActivityEntry(_CamelModel):
 __all__ = [
     "BridgeState",
     "ModelOverride",
+    "TimeRange",
     "ScheduleConfig",
     "Project",
     "StateFile",

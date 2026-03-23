@@ -42,11 +42,9 @@ def test_get_schedule(tmp_config):
 def test_save_schedule(tmp_config):
     s = tmp_config.get_schedule()
     s.enabled = True
-    s.warn_lead_minutes = 30
     tmp_config.save_schedule(s)
     reloaded = tmp_config.get_schedule()
     assert reloaded.enabled is True
-    assert reloaded.warn_lead_minutes == 30
 
 def test_malformed_json_returns_defaults(tmp_path):
     path = tmp_path / "idh-global-config.json"

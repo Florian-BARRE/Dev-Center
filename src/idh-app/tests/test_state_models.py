@@ -1,7 +1,8 @@
 import pytest
 from libs.state.models import (
     BridgeState, Project, ScheduleConfig,
-    GlobalDefaults, GlobalConfig, ActivityEntry
+    GlobalDefaults, GlobalConfig, ActivityEntry,
+    TimeRange,
 )
 
 def test_bridge_state_auto_renew_default():
@@ -15,15 +16,18 @@ def test_bridge_state_auto_renew_set():
 def test_schedule_config_defaults():
     c = ScheduleConfig()
     assert c.enabled is False
-    assert c.renewal_times == []
+    assert c.ranges == []
     assert c.days == []
-    assert c.warn_lead_minutes == 30
-    assert c.warn_interval_minutes == 10
 
-def test_schedule_config_renewal_times_camel():
-    c = ScheduleConfig(enabled=True, renewal_times=["08:00", "16:00"], days=["mon", "fri"])
+def test_schedule_config_ranges_camel():
+    c = ScheduleConfig(
+        enabled=True,
+        ranges=[TimeRange(start="08:00", end="00:00"), TimeRange(start="16:00", end="00:00")],
+        days=["mon", "fri"],
+    )
     data = c.model_dump(by_alias=True)
-    assert data["renewalTimes"] == ["08:00", "16:00"]
+    assert len(data["ranges"]) == 2
+    assert data["ranges"][0]["start"] == "08:00"
     assert data["days"] == ["mon", "fri"]
 
 def test_project_schedule_defaults_none():
@@ -47,3 +51,39 @@ def test_activity_entry_camel():
     assert data["groupId"] == "-123"
     assert data["projectId"] == "foo"
     assert data["level"] == "info"
+
+
+def test_new_schedule_config_accepts_ranges():
+    cfg = ScheduleConfig(
+        enabled=True,
+        ranges=[{"start": "08:00", "end": "00:00"}],
+        days=["mon", "fri"],
+    )
+    assert len(cfg.ranges) == 1
+    assert cfg.ranges[0].start == "08:00"
+    assert cfg.ranges[0].end == "00:00"
+
+
+def test_schedule_config_migrates_old_renewal_times():
+    """Old persisted format with renewalTimes is migrated transparently."""
+    old_data = {
+        "enabled": True,
+        "renewalTimes": ["08:00", "18:00"],
+        "days": [],
+        "warnLeadMinutes": 30,
+        "warnIntervalMinutes": 10,
+        "alertTemplate": "Bridge renewing in {remaining}",
+    }
+    cfg = ScheduleConfig.model_validate(old_data)
+    assert len(cfg.ranges) == 2
+    assert cfg.ranges[0].start == "08:00"
+    assert cfg.ranges[0].end == "00:00"
+    assert cfg.ranges[1].start == "18:00"
+
+
+def test_bridge_state_has_scheduled_session_flag():
+    bs = BridgeState(pid=1, workspace="/ws", expires_at="2099-01-01T00:00:00+00:00")
+    assert bs.scheduled_session is False
+
+    bs2 = BridgeState(pid=1, workspace="/ws", expires_at="2099-01-01T00:00:00+00:00", scheduled_session=True)
+    assert bs2.scheduled_session is True
