@@ -11,11 +11,15 @@ vi.mock('../../api/monitoring');
 vi.mock('../../api/settings');
 
 describe('Dashboard', () => {
+  beforeEach(() => {
+    vi.mocked(settingsApi.getTelegramModel).mockResolvedValue({ provider: 'anthropic', model: 'claude-opus-4-6' });
+  });
+
   it('shows empty state when there are no projects', async () => {
     vi.mocked(projectsApi.listProjects).mockResolvedValue([]);
     vi.mocked(monitoringApi.getActivityLog).mockResolvedValue([]);
     const { findByText } = render(<MemoryRouter><Dashboard /></MemoryRouter>);
-    await findByText(/aucun projet/i);
+    await findByText(/no projects yet/i);
   });
 
   it('renders project cards when projects exist', async () => {

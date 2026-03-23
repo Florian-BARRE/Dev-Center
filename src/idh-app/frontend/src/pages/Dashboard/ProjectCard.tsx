@@ -65,6 +65,7 @@ export function ProjectCard({ project, telegramModel }: Props) {
         color: theme.colors.muted,
         marginBottom: theme.spacing.md,
       }}>
+        {/* Strip https:// scheme for display; SSH URLs (git@) are shown as-is */}
         {project.repoUrl.replace('https://', '')}
       </div>
 
@@ -82,7 +83,7 @@ export function ProjectCard({ project, telegramModel }: Props) {
           )}
         </div>
         <Link
-          to={`/projects/${project.groupId}`}
+          to={`/projects/${encodeURIComponent(project.groupId)}`}
           style={{ color: theme.colors.textSecondary, textDecoration: 'none', fontSize: theme.fontSize.md }}
         >
           →

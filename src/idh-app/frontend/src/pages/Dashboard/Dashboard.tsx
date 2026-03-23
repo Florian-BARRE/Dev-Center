@@ -31,25 +31,29 @@ export function Dashboard() {
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
 
   const load = useCallback(async () => {
-    // 1. Fetch projects and activity log in parallel
-    const [projs, acts] = await Promise.all([listProjects(), getActivityLog(20)]);
-    setProjects(projs);
-    setActivity(acts);
+    try {
+      // 1. Fetch projects + activity in parallel
+      const [projs, acts] = await Promise.all([listProjects(), getActivityLog(20)]);
+      setProjects(projs);
+      setActivity(acts);
 
-    // 2. Fetch telegram model for each project (N+1 — acceptable for small N)
-    const models: Record<string, TelegramModelResponse> = {};
-    await Promise.all(
-      projs.map(async (p) => {
-        try {
-          models[p.groupId] = await getTelegramModel(p.groupId);
-        } catch {
-          // Ignore — project may not have a telegram model configured
-        }
-      })
-    );
-    setTelegramModels(models);
-    setLastUpdated(new Date());
-    setLoading(false);
+      // 2. Fetch telegram model for each project (N+1 — acceptable for small N)
+      const models: Record<string, TelegramModelResponse> = {};
+      await Promise.all(
+        projs.map(async (p) => {
+          try {
+            models[p.groupId] = await getTelegramModel(p.groupId);
+          } catch { /* ignore — project may not have a model set */ }
+        })
+      );
+      setTelegramModels(models);
+      setLastUpdated(new Date());
+    } catch (err) {
+      // Log fetch errors; UI retains previous data and continues polling
+      console.error('[Dashboard] Failed to load data:', err);
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => {
@@ -98,7 +102,7 @@ export function Dashboard() {
           </SectionHeader>
           {projects.length === 0 ? (
             <div style={{ color: theme.colors.muted, fontFamily: theme.font.sans, fontSize: theme.fontSize.sm, padding: `${theme.spacing.xl} 0` }}>
-              Aucun projet — <Link to="/projects/new" style={{ color: theme.colors.text }}>créer le premier →</Link>
+              No projects yet — <Link to="/projects/new" style={{ color: theme.colors.text }}>create the first one →</Link>
             </div>
           ) : (
             projects.map((p) => (
