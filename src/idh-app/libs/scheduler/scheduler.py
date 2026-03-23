@@ -1,6 +1,6 @@
 # ====== Code Summary ======
-# Async service that drives session scheduling: renews/starts bridges at configured
-# renewal times, sends pre-renewal warnings, and auto-renews expiring bridges.
+# Async service that drives session scheduling: starts bridges on range entry,
+# stops scheduler-owned bridges on range exit, and auto-renews expiring bridges.
 
 # ====== Standard Library Imports ======
 from __future__ import annotations
@@ -31,21 +31,18 @@ _WEEKDAY_NAMES = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
 # Auto-renew triggers this many minutes before expiry
 _AUTO_RENEW_LEAD_MINUTES = 5
 
-# A renewal is considered to have "just triggered" if it occurred within this window
-_RENEWAL_TRIGGER_WINDOW_MINUTES = 2
-
 
 class SchedulerService(LoggerClass):
     """
-    Drives session scheduling for all IDH projects.
+    Drives range-based session scheduling for all IDH projects.
 
     Runs as a background asyncio task. Every 60 seconds it scans all
-    projects, applies schedule logic, sends warnings, and auto-renews
-    bridges when configured.
+    projects and applies range-based scheduling logic:
 
-    The schedule model uses ``renewal_times`` (HH:MM list) rather than
-    time windows: the bridge is renewed/started at each renewal time, and
-    warnings are sent ``warn_lead_minutes`` before each upcoming renewal.
+    - In range + no session → start (marks scheduled_session=True)
+    - In range + session expiring within 5 min → renew
+    - Not in range + scheduled_session=True → stop
+    - Sessions started manually (scheduled_session=False) are never touched
 
     Attributes:
         _state_manager (StateManager): Access to persisted project state.
@@ -54,7 +51,6 @@ class SchedulerService(LoggerClass):
         _activity_log (ActivityLog): Event log for the monitoring page.
         _telegram_notifier (TelegramNotifier): Sends Telegram alerts.
         _workspaces_dir (pathlib.Path): Base dir for project workspaces.
-        _warn_state (dict[str, datetime.datetime]): Last-warned time per group_id.
         _event_bus (EventBus | None): Optional event bus for publishing real-time events.
     """
 
@@ -88,7 +84,6 @@ class SchedulerService(LoggerClass):
         self._telegram_notifier = telegram_notifier
         self._workspaces_dir = workspaces_dir
         self._event_bus: "EventBus | None" = event_bus
-        self._warn_state: dict[str, datetime.datetime] = {}
 
     # ──────────────────────────── Private helpers ─────────────────────────────
 
@@ -140,92 +135,45 @@ class SchedulerService(LoggerClass):
         # 2. Check if the weekday name is in the active days list
         return _WEEKDAY_NAMES[date.weekday()] in schedule.days
 
-    def _get_next_renewal_dt(
-        self,
-        schedule: ScheduleConfig,
-        now: datetime.datetime,
-    ) -> datetime.datetime | None:
-        """
-        Find the earliest upcoming renewal datetime strictly after ``now``.
-
-        Scans the next 8 days so weekly schedules are fully covered.
-
-        Args:
-            schedule (ScheduleConfig): Schedule with renewal_times.
-            now (datetime.datetime): Reference local datetime.
-
-        Returns:
-            datetime.datetime | None: Next renewal datetime, or None if none found.
-        """
-        # 1. Iterate over the next 8 days
-        for day_offset in range(8):
-            check_date = now.date() + datetime.timedelta(days=day_offset)
-
-            if not self._is_active_day(schedule, check_date):
-                continue
-
-            # 2. Check each renewal time on this date
-            for time_str in sorted(schedule.renewal_times):
-                hh, mm = map(int, time_str.split(":"))
-                candidate = datetime.datetime.combine(check_date, datetime.time(hh, mm))
-                if candidate > now:
-                    return candidate
-
-        return None
-
-    def _just_triggered_renewal(
-        self,
-        schedule: ScheduleConfig,
-        now: datetime.datetime,
+    def _is_in_active_range(
+        self, now: datetime.datetime, schedule: ScheduleConfig
     ) -> bool:
         """
-        Return True if a renewal time occurred within the last trigger window.
+        Return True if ``now`` falls within any active time range and on an active day.
 
-        Used to detect that the scheduler tick just crossed a configured renewal
-        time, so the bridge should be started or renewed.
+        Ranges where end <= start are treated as overnight (start to midnight + midnight to end).
+        "00:00" end is treated as midnight (end of the 23:xx hour).
 
         Args:
-            schedule (ScheduleConfig): Schedule with renewal_times.
             now (datetime.datetime): Current local datetime.
+            schedule (ScheduleConfig): The effective schedule to check against.
 
         Returns:
-            bool: True if a renewal trigger is active right now.
+            bool: True if now is within an active range on an active day.
         """
-        # 1. Skip if today is not an active day
+        # 1. Check if today is an active day
         if not self._is_active_day(schedule, now.date()):
             return False
 
-        # 2. Check each renewal time on today's date
-        trigger_window = datetime.timedelta(minutes=_RENEWAL_TRIGGER_WINDOW_MINUTES)
-        for time_str in schedule.renewal_times:
-            hh, mm = map(int, time_str.split(":"))
-            renewal_dt = datetime.datetime.combine(now.date(), datetime.time(hh, mm))
-            delta = now - renewal_dt
-            if datetime.timedelta(0) <= delta <= trigger_window:
-                return True
+        # 2. Check if current time falls inside any range
+        current_minutes = now.hour * 60 + now.minute
+        for r in schedule.ranges:
+            start_h, start_m = map(int, r.start.split(":"))
+            end_h, end_m = map(int, r.end.split(":"))
+            start_minutes = start_h * 60 + start_m
+            # "00:00" end = midnight = treat as 1440 (24*60) to cover full day-end
+            end_minutes = end_h * 60 + end_m if (end_h, end_m) != (0, 0) else 1440
+
+            if start_minutes <= end_minutes:
+                # Normal range: e.g. 08:00 → 20:00
+                if start_minutes <= current_minutes < end_minutes:
+                    return True
+            else:
+                # Overnight range: e.g. 22:00 → 06:00
+                if current_minutes >= start_minutes or current_minutes < end_minutes:
+                    return True
 
         return False
-
-    def _format_remaining(self, target: datetime.datetime) -> str:
-        """
-        Format the remaining time until ``target`` as a human-readable string.
-
-        Args:
-            target (datetime.datetime): Target local datetime.
-
-        Returns:
-            str: E.g. "47 minutes" or "2h 3min".
-        """
-        # 1. Compute delta from now
-        now = datetime.datetime.now()
-        delta = target - now
-
-        # 2. Format as human-readable
-        total_minutes = max(0, int(delta.total_seconds() // 60))
-        hours, minutes = divmod(total_minutes, 60)
-        if hours > 0:
-            return f"{hours}h {minutes}min"
-        return f"{minutes} minutes"
 
     def _format_remaining_from_iso(self, expires_at: str) -> str:
         """
@@ -237,7 +185,7 @@ class SchedulerService(LoggerClass):
         Returns:
             str: Human-readable remaining time string.
         """
-        # 1. Parse UTC timestamp and convert to local for display
+        # 1. Parse UTC timestamp and compute delta
         expires = datetime.datetime.fromisoformat(expires_at)
         now = datetime.datetime.now(datetime.UTC)
         delta = expires - now
@@ -251,7 +199,7 @@ class SchedulerService(LoggerClass):
 
     async def _tick(self) -> None:
         """
-        Single scheduler pass — scans all projects and applies schedule logic.
+        Single scheduler pass — scans all projects and applies range-based logic.
         """
         # 1. Load current state
         state = self._state_manager.load()
@@ -260,7 +208,8 @@ class SchedulerService(LoggerClass):
         # 2. Process each project
         for group_id, project in state.projects.items():
             try:
-                await self._process_project(group_id, project, now)
+                schedule = self._get_effective_schedule(project)
+                await self._process_project(project, schedule, now)
             except Exception as exc:
                 self.logger.error(f"Scheduler error for group '{group_id}': {exc}")
 
@@ -273,85 +222,81 @@ class SchedulerService(LoggerClass):
             )
 
     async def _process_project(
-        self,
-        group_id: str,
-        project: Project,
-        now: datetime.datetime,
+        self, project: Project, schedule: ScheduleConfig | None, now: datetime.datetime
     ) -> None:
         """
-        Apply scheduling logic for a single project.
+        Apply range-based scheduling logic to one project.
 
-        Processing order:
-        1. Auto-renew check: if bridge has auto_renew=True and is expiring soon, renew it.
-        2. Schedule-based renewal: if a renewal time just triggered, start or renew the bridge.
-        3. Pre-renewal warning: if within warn_lead_minutes of the next renewal time,
-           send a Telegram alert (rate-limited by warn_interval_minutes).
+        - In range + no session → start (marks scheduled_session=True)
+        - In range + session expiring within 5 min → renew
+        - Not in range + scheduled_session → stop
+        - Never touches manually-started sessions (scheduled_session=False)
 
         Args:
-            group_id (str): Telegram group ID.
             project (Project): Current project state.
+            schedule (ScheduleConfig | None): Active schedule, or None if scheduling is off.
             now (datetime.datetime): Current UTC time.
         """
-        # 1. Auto-renew: renew bridge expiring in ≤ AUTO_RENEW_LEAD_MINUTES
-        if project.bridge is not None and project.bridge.auto_renew:
-            expires = datetime.datetime.fromisoformat(project.bridge.expires_at)
-            lead = datetime.timedelta(minutes=_AUTO_RENEW_LEAD_MINUTES)
-            if expires - now <= lead:
-                self.logger.info(f"Auto-renewing bridge for group '{group_id}'")
-                await self._bridge_manager.renew_bridge(group_id)
-                self._activity_log.log(group_id, project.project_id, "Bridge auto-renewed")
-                return  # Skip other schedule checks after renew
+        bridge = project.bridge
 
-        # 2. Resolve effective schedule; nothing to do if scheduling is off
-        schedule = self._get_effective_schedule(project)
-        if schedule is None:
-            return
+        # 1. Auto-renew: renew any bridge (manual or scheduled) expiring within the lead window
+        if bridge is not None and bridge.auto_renew:
+            expires = datetime.datetime.fromisoformat(bridge.expires_at)
+            if (expires - now).total_seconds() < _AUTO_RENEW_LEAD_MINUTES * 60:
+                self.logger.info(f"Auto-renewing bridge for group '{project.group_id}'")
+                await self._bridge_manager.renew_bridge(project.group_id)
+                self._activity_log.log(project.group_id, project.project_id, "Bridge auto-renewed")
+                return
 
-        # 3. Schedule-based renewal: start or renew at configured renewal times
-        # Use local time for day/time comparison since renewal_times are wall-clock times
-        now_local = datetime.datetime.now()
-        if self._just_triggered_renewal(schedule, now_local):
-            if project.bridge is not None:
-                self.logger.info(f"Scheduler: renewing bridge for group '{group_id}' (renewal time)")
-                await self._bridge_manager.renew_bridge(group_id)
-                self._activity_log.log(group_id, project.project_id,
-                                       "Bridge renewed by scheduler")
-            else:
+        # 2. Determine whether we are currently inside an active range.
+        # Use an empty ScheduleConfig (all-days, no ranges → always False) when scheduling is off,
+        # so _is_in_active_range can be called uniformly and patched cleanly in tests.
+        effective_schedule = schedule if schedule is not None else ScheduleConfig()
+        in_range = self._is_in_active_range(now, effective_schedule)
+
+        if in_range:
+            # 3. Only act on range entry/renewal if a real schedule is configured
+            if schedule is None:
+                pass  # No schedule — no automatic start, but allow expiry renewal below
+            elif bridge is None:
+                # 4. Enter range with no active session: start a new scheduled session
                 workspace = self._workspaces_dir / project.project_id
-                self.logger.info(f"Scheduler: starting bridge for group '{group_id}' (renewal time)")
-                await self._bridge_manager.start_bridge(group_id=group_id, workspace=workspace)
-                self._activity_log.log(group_id, project.project_id,
-                                       "Bridge started by scheduler")
-            return
-
-        # 4. Pre-renewal warning: send alert if approaching next renewal time
-        next_renewal = self._get_next_renewal_dt(schedule, now_local)
-        if next_renewal is None:
-            return
-
-        lead = datetime.timedelta(minutes=schedule.warn_lead_minutes)
-        if next_renewal - now_local <= lead:
-            last_warn = self._warn_state.get(group_id)
-            interval = datetime.timedelta(minutes=schedule.warn_interval_minutes)
-            if last_warn is None or now_local - last_warn >= interval:
-                remaining = self._format_remaining(next_renewal)
-                message = schedule.alert_template.format(remaining=remaining)
-                await self._telegram_notifier.send_alert(group_id, message)
-                self._warn_state[group_id] = now_local
-                self._activity_log.log(
-                    group_id, project.project_id,
-                    f"Telegram alert sent — renewal in {remaining}",
-                    level="warning",
+                self.logger.info(
+                    f"Scheduler: starting bridge for group '{project.group_id}' (range entry)"
                 )
-                if self._event_bus is not None:
-                    remaining_minutes = max(
-                        0, int((next_renewal - now_local).total_seconds() // 60)
+                await self._bridge_manager.start_bridge(
+                    group_id=project.group_id, workspace=workspace
+                )
+                self._activity_log.log(
+                    project.group_id, project.project_id, "Bridge started by scheduler"
+                )
+                # Mark as scheduler-owned after start
+                updated = self._state_manager.get_project(project.group_id)
+                if updated and updated.bridge:
+                    updated.bridge.scheduled_session = True
+                    self._state_manager.upsert_project(project.group_id, updated)
+
+            if bridge is not None and bridge.scheduled_session:
+                # 5. In range with a scheduler-owned session: renew if expiring soon
+                expires = datetime.datetime.fromisoformat(bridge.expires_at)
+                if (expires - now).total_seconds() < _AUTO_RENEW_LEAD_MINUTES * 60:
+                    self.logger.info(
+                        f"Scheduler: renewing bridge for group '{project.group_id}' (expiring)"
                     )
-                    await self._event_bus.publish(
-                        "scheduler.warning_sent",
-                        {"remaining_minutes": remaining_minutes},
-                        group_id=group_id,
+                    await self._bridge_manager.renew_bridge(project.group_id)
+                    self._activity_log.log(
+                        project.group_id, project.project_id, "Bridge renewed by scheduler"
                     )
+        else:
+            if bridge is not None and bridge.scheduled_session:
+                # 6. Exit range: stop the scheduler-owned session
+                self.logger.info(
+                    f"Scheduler: stopping bridge for group '{project.group_id}' (range exit)"
+                )
+                await self._bridge_manager.stop_bridge(project.group_id)
+                self._activity_log.log(
+                    project.group_id, project.project_id, "Bridge stopped by scheduler (range exit)"
+                )
 
     async def _run_loop(self) -> None:
         """Run indefinitely, calling _tick every 60 seconds."""
