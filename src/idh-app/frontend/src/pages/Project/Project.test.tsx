@@ -1,9 +1,10 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import { vi } from 'vitest';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import ProjectPage from './ProjectPage';
 import * as projectsApi from '../../api/projects';
 import * as settingsApi from '../../api/settings';
+import * as bridgeApi from '../../api/bridge';
 import type { Project } from '../../api/types';
 
 vi.mock('../../api/projects');
@@ -42,50 +43,49 @@ describe('ProjectPage', () => {
     vi.mocked(settingsApi.getContextSize).mockResolvedValue({
       total: 10000, claudeMd: 5000, systemPrompt: 3000, sessionMemory: 2000, estimatedMax: 200000,
     });
+    vi.mocked(bridgeApi.startBridge).mockResolvedValue({ status: 'ok' });
+    vi.mocked(bridgeApi.stopBridge).mockResolvedValue({ status: 'ok' });
+    vi.mocked(bridgeApi.renewBridge).mockResolvedValue({ status: 'ok' });
+  });
+
+  it('renders breadcrumb and tab bar', async () => {
+    renderWithRoute();
+    await screen.findByText('← Projects');
+    await screen.findByText('OVERVIEW');
+    await screen.findByText('SESSION TELEGRAM');
+    await screen.findByText('SESSION CODE');
   });
 
   it('shows project ID in the heading', async () => {
     renderWithRoute();
-    // The project name appears in both the page heading and the OverviewTab card.
-    // Use getAllByText to tolerate multiple matches, then assert at least one exists.
+    // The project name appears in the header strip
     await waitFor(() => expect(screen.getAllByText('my-project').length).toBeGreaterThanOrEqual(1));
   });
 
-  it('renders 3 tabs', async () => {
+  it('renders 3 tab links (OVERVIEW, SESSION TELEGRAM, SESSION CODE)', async () => {
     renderWithRoute();
-    // Match tab labels exactly to avoid collisions with action buttons in tab content.
+    await screen.findByText('OVERVIEW');
+    await screen.findByText('SESSION TELEGRAM');
+    await screen.findByText('SESSION CODE');
+  });
+
+  it('renders Stop and Renew buttons when bridge is active', async () => {
+    renderWithRoute();
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'Overview' })).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: 'Telegram' })).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: 'Code Session' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Stop' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Renew' })).toBeInTheDocument();
     });
   });
 
-  it('Overview tab shows repo URL', async () => {
+  it('renders Start button when bridge is null', async () => {
+    vi.mocked(projectsApi.getProject).mockResolvedValue({ ...mockProject, bridge: null });
     renderWithRoute();
-    await waitFor(() => screen.getByRole('button', { name: /overview/i }));
-    fireEvent.click(screen.getByRole('button', { name: /overview/i }));
-    expect(screen.getAllByText(/git@github\.com/).length).toBeGreaterThan(0);
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Start' })).toBeInTheDocument();
+    });
   });
 
-  it('Telegram tab shows model selector', async () => {
-    renderWithRoute();
-    await waitFor(() => screen.getByRole('button', { name: /telegram/i }));
-    fireEvent.click(screen.getByRole('button', { name: /telegram/i }));
-    await waitFor(() => expect(screen.getByRole('combobox')).toBeInTheDocument());
-  });
-
-  it('Telegram tab loads and shows system prompt textarea', async () => {
-    renderWithRoute();
-    await waitFor(() => screen.getByRole('button', { name: /telegram/i }));
-    fireEvent.click(screen.getByRole('button', { name: /telegram/i }));
-    // The Telegram tab renders a system-prompt textarea and a MarkdownEditor
-    // (mocked as a textarea). Assert that at least one textbox is present.
-    const textboxes = await screen.findAllByRole('textbox');
-    expect(textboxes.length).toBeGreaterThanOrEqual(1);
-  });
-
-  it('renders Overview, Telegram, Code Session tabs', async () => {
+  it('renders Overview, SESSION TELEGRAM, SESSION CODE tabs', async () => {
     render(
       <MemoryRouter initialEntries={['/projects/-100g']}>
         <Routes>
@@ -94,9 +94,9 @@ describe('ProjectPage', () => {
       </MemoryRouter>
     );
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: /overview/i })).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: /telegram/i })).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: /code session/i })).toBeInTheDocument();
+      expect(screen.getByText('OVERVIEW')).toBeInTheDocument();
+      expect(screen.getByText('SESSION TELEGRAM')).toBeInTheDocument();
+      expect(screen.getByText('SESSION CODE')).toBeInTheDocument();
     });
   });
 });

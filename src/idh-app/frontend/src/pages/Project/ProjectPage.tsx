@@ -1,82 +1,138 @@
 import { useEffect, useState } from 'react';
-import { useParams, useNavigate, useMatch, Link } from 'react-router-dom';
+import { useParams, Link, NavLink, Routes, Route } from 'react-router-dom';
 import { theme } from '../../theme';
 import { getProject } from '../../api/projects';
+import { startBridge, stopBridge, renewBridge } from '../../api/bridge';
 import type { Project } from '../../api/types';
 import StatusBadge from '../../components/StatusBadge';
+import CountdownTimer from '../../components/CountdownTimer';
 import OverviewTab from './tabs/OverviewTab';
 import TelegramTab from './tabs/TelegramTab';
 import CodeSessionTab from './tabs/CodeSessionTab';
 
-type Tab = 'overview' | 'telegram' | 'code-session';
+// ── Styles ────────────────────────────────────────────────────────────────────
 
-const TABS: { id: Tab; label: string; icon: string }[] = [
-  { id: 'overview',     label: 'Overview',     icon: 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6' },
-  { id: 'telegram',     label: 'Telegram',     icon: 'M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z' },
-  { id: 'code-session', label: 'Code Session', icon: 'M13 10V3L4 14h7v7l9-11h-7z' },
-];
+const headerStripStyle: React.CSSProperties = {
+  background: theme.colors.surface,
+  borderBottom: `1px solid ${theme.colors.border}`,
+  padding: '0 24px',
+  height: '48px',
+  display: 'flex',
+  alignItems: 'center',
+  gap: theme.spacing.md,
+  flexShrink: 0,
+};
+
+const tabBarStyle: React.CSSProperties = {
+  display: 'flex',
+  gap: '0',
+  borderBottom: `1px solid ${theme.colors.border}`,
+  padding: '0 24px',
+  height: '40px',
+  alignItems: 'flex-end',
+  flexShrink: 0,
+};
+
+const tabLinkBase: React.CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  padding: '0 12px',
+  height: '40px',
+  fontSize: theme.fontSize.xs,
+  fontWeight: theme.fontWeight.medium,
+  fontFamily: theme.font.sans,
+  textDecoration: 'none',
+  letterSpacing: '0.06em',
+  cursor: 'pointer',
+  background: 'none',
+  border: 'none',
+  borderBottomWidth: '2px',
+  borderBottomStyle: 'solid',
+  borderBottomColor: 'transparent',
+  marginBottom: '-1px',
+  transition: 'color 0.15s, border-color 0.15s',
+};
+
+function tabStyle(isActive: boolean): React.CSSProperties {
+  return {
+    ...tabLinkBase,
+    color: isActive ? theme.colors.accent : theme.colors.muted,
+    borderBottomColor: isActive ? theme.colors.accent : 'transparent',
+  };
+}
+
+const actionBtnBase: React.CSSProperties = {
+  padding: '5px 12px',
+  border: `1px solid ${theme.colors.borderStrong}`,
+  borderRadius: theme.radius.md,
+  fontSize: theme.fontSize.xs,
+  fontFamily: theme.font.sans,
+  fontWeight: theme.fontWeight.medium,
+  cursor: 'pointer',
+  transition: 'opacity 0.15s',
+};
+
+// ── ProjectPage ───────────────────────────────────────────────────────────────
 
 export default function ProjectPage() {
-  const { groupId } = useParams<{ groupId: string }>();
-  const decodedGroupId = decodeURIComponent(groupId ?? '');
-  const navigate = useNavigate();
+  const { groupId: rawGroupId } = useParams<{ groupId: string }>();
+  const groupId = decodeURIComponent(rawGroupId ?? '');
 
   const [project, setProject] = useState<Project | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [actionBusy, setActionBusy] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
 
-  // 1. Determine active tab from URL
-  const baseUrl = `/projects/${encodeURIComponent(decodedGroupId)}`;
-  const telegramMatch    = useMatch(`${baseUrl}/telegram`);
-  const codeSessionMatch = useMatch(`${baseUrl}/code-session/*`);
-
-  const activeTab: Tab =
-    telegramMatch    ? 'telegram' :
-    codeSessionMatch ? 'code-session' :
-    'overview';
-
-  // 2. Load project on mount
+  // 1. Load project data on mount
   useEffect(() => {
-    if (!decodedGroupId) return;
-    getProject(decodedGroupId)
+    if (!groupId) return;
+    setLoading(true);
+    getProject(groupId)
       .then((p) => { setProject(p); setLoading(false); })
       .catch((e: Error) => { setError(e.message); setLoading(false); });
-  }, [decodedGroupId]);
+  }, [groupId]);
 
-  const goToTab = (tab: Tab) => {
-    if (tab === 'overview') navigate(baseUrl);
-    else navigate(`${baseUrl}/${tab}`);
+  // 2. Bridge action helper — calls fn, then refreshes project
+  const act = async (fn: () => Promise<unknown>) => {
+    if (actionBusy) return;
+    setActionBusy(true);
+    setActionError(null);
+    try {
+      await fn();
+      const updated = await getProject(groupId);
+      setProject(updated);
+    } catch (err) {
+      setActionError('Action failed. Please try again.');
+    } finally {
+      setActionBusy(false);
+    }
   };
 
-  // ── Loading skeleton ──────────────────────────────────────────────────────
-
+  // 3. Render loading state
   if (loading) {
     return (
-      <div style={{ padding: '32px' }}>
-        <div style={{
-          height: '40px', width: '240px',
-          background: theme.colors.surface,
-          borderRadius: theme.radius.md,
-          opacity: 0.5,
-          animation: 'shimmer 1.5s infinite',
-          backgroundImage: `linear-gradient(90deg, ${theme.colors.surfaceElevated} 0%, #1e1e3a 50%, ${theme.colors.surfaceElevated} 100%)`,
-          backgroundSize: '200% 100%',
-        }} />
+      <div style={{ paddingTop: theme.nav.height }}>
+        <div style={{ padding: theme.spacing.xl, color: theme.colors.muted, fontSize: theme.fontSize.sm, fontFamily: theme.font.sans }}>
+          Loading…
+        </div>
       </div>
     );
   }
 
-  // ── Error ──────────────────────────────────────────────────────────────────
-
+  // 4. Render error state
   if (error) {
     return (
-      <div style={{ padding: '32px' }}>
+      <div style={{ paddingTop: theme.nav.height }}>
         <div style={{
-          padding: '16px',
-          background: theme.colors.dangerBg,
+          margin: theme.spacing.xl,
+          padding: theme.spacing.lg,
+          background: theme.colors.surface,
           border: `1px solid ${theme.colors.danger}44`,
           borderRadius: theme.radius.md,
           color: theme.colors.danger,
+          fontSize: theme.fontSize.sm,
+          fontFamily: theme.font.sans,
         }}>
           {error}
         </div>
@@ -89,119 +145,132 @@ export default function ProjectPage() {
   const isActive = project.bridge !== null;
 
   return (
-    <div style={{
-      padding: '32px',
-      animation: 'fadeIn 0.3s ease',
-    }}>
-      {/* Breadcrumb */}
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: '6px',
-        marginBottom: '20px',
-        fontSize: theme.font.size.xs,
-        fontFamily: theme.font.mono,
-        color: theme.colors.muted,
-      }}>
-        <Link to="/" style={{ color: theme.colors.muted, textDecoration: 'none', transition: theme.transition.fast }}>
-          Dashboard
-        </Link>
-        <span>›</span>
-        <span style={{ color: theme.colors.textSecondary }}>{decodedGroupId}</span>
-      </div>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', paddingTop: theme.nav.height }}>
 
-      {/* Page header */}
-      <div style={{
-        paddingBottom: '24px',
-        borderBottom: `1px solid ${theme.colors.border}`,
-        marginBottom: '24px',
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-          {/* Avatar */}
-          <div style={{
-            width: '44px', height: '44px',
-            borderRadius: theme.radius.md,
-            background: theme.colors.accentDim,
-            border: `1px solid ${theme.colors.accent}33`,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontFamily: theme.font.mono,
-            fontSize: theme.font.size.lg,
-            fontWeight: theme.font.weight.bold,
-            color: theme.colors.accent,
+      {/* Header strip */}
+      <div style={headerStripStyle}>
+
+        {/* Breadcrumb */}
+        <Link
+          to="/"
+          style={{
+            color: theme.colors.textSecondary,
+            fontSize: theme.fontSize.xs,
+            fontFamily: theme.font.sans,
+            textDecoration: 'none',
             flexShrink: 0,
-          }}>
-            {project.projectId.charAt(0).toUpperCase()}
-          </div>
+          }}
+        >
+          ← Projects
+        </Link>
 
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-              <h1 style={{
-                margin: 0,
-                fontFamily: theme.font.display,
-                fontWeight: theme.font.weight.bold,
-                fontSize: theme.font.size.xxl,
-                color: theme.colors.text,
-                lineHeight: 1.1,
-              }}>
-                {project.projectId}
-              </h1>
-              <StatusBadge status={isActive ? 'active' : 'idle'} />
-            </div>
-            <div style={{
-              marginTop: '4px',
-              fontSize: theme.font.size.xs,
-              color: theme.colors.muted,
-              fontFamily: theme.font.mono,
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-            }}>
-              {project.repoUrl}
-            </div>
-          </div>
+        <span style={{ color: theme.colors.borderStrong, fontSize: theme.fontSize.sm }}>/</span>
+
+        {/* Project name */}
+        <span style={{
+          fontSize: theme.fontSize.sm,
+          fontWeight: theme.fontWeight.semibold,
+          fontFamily: theme.font.sans,
+          color: theme.colors.text,
+          flexShrink: 0,
+        }}>
+          {project.projectId}
+        </span>
+
+        {/* Status badge */}
+        <StatusBadge status={isActive ? 'active' : 'idle'} />
+
+        {/* Countdown — only when bridge is active */}
+        {isActive && project.bridge && (
+          <CountdownTimer expiresAt={project.bridge.expiresAt} />
+        )}
+
+        {/* Action buttons — pushed to the right */}
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: theme.spacing.sm, alignItems: 'center', flexWrap: 'wrap' }}>
+          {!isActive && (
+            <button
+              onClick={() => act(() => startBridge(groupId))}
+              disabled={actionBusy}
+              style={{
+                ...actionBtnBase,
+                background: theme.colors.active,
+                color: theme.colors.bg,
+                border: 'none',
+                opacity: actionBusy ? 0.6 : 1,
+              }}
+            >
+              Start
+            </button>
+          )}
+          {isActive && (
+            <>
+              <button
+                onClick={() => act(() => stopBridge(groupId))}
+                disabled={actionBusy}
+                style={{
+                  ...actionBtnBase,
+                  background: 'none',
+                  color: theme.colors.danger,
+                  borderColor: `${theme.colors.danger}55`,
+                  opacity: actionBusy ? 0.6 : 1,
+                }}
+              >
+                Stop
+              </button>
+              <button
+                onClick={() => act(() => renewBridge(groupId))}
+                disabled={actionBusy}
+                style={{
+                  ...actionBtnBase,
+                  background: 'none',
+                  color: theme.colors.text,
+                  opacity: actionBusy ? 0.6 : 1,
+                }}
+              >
+                Renew
+              </button>
+            </>
+          )}
         </div>
+        {actionError && (
+          <span style={{ color: theme.colors.danger, fontSize: theme.fontSize.sm, marginLeft: theme.spacing.sm }}>
+            {actionError}
+          </span>
+        )}
       </div>
 
       {/* Tab bar */}
-      <div style={{
-        display: 'flex',
-        gap: '2px',
-        borderBottom: `1px solid ${theme.colors.border}`,
-        marginBottom: '24px',
-      }}>
-        {TABS.map((t) => (
-          <button
-            key={t.id}
-            onClick={() => goToTab(t.id)}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-              background: 'none',
-              border: 'none',
-              cursor: 'pointer',
-              padding: '8px 14px',
-              fontSize: theme.font.size.md,
-              fontFamily: theme.font.sans,
-              fontWeight: activeTab === t.id ? theme.font.weight.semibold : theme.font.weight.normal,
-              color: activeTab === t.id ? theme.colors.accent : theme.colors.muted,
-              borderBottom: activeTab === t.id ? `2px solid ${theme.colors.accent}` : '2px solid transparent',
-              marginBottom: '-1px',
-              transition: theme.transition.fast,
-            }}
-          >
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d={t.icon} />
-            </svg>
-            {t.label}
-          </button>
-        ))}
+      <div style={tabBarStyle}>
+        <NavLink
+          to=""
+          end
+          style={({ isActive }) => tabStyle(isActive)}
+        >
+          OVERVIEW
+        </NavLink>
+        <NavLink
+          to="telegram"
+          style={({ isActive }) => tabStyle(isActive)}
+        >
+          SESSION TELEGRAM
+        </NavLink>
+        <NavLink
+          to="code"
+          style={({ isActive }) => tabStyle(isActive)}
+        >
+          SESSION CODE
+        </NavLink>
       </div>
 
       {/* Tab content */}
-      {activeTab === 'overview'     && <OverviewTab    project={project} onProjectChange={setProject} />}
-      {activeTab === 'telegram'     && <TelegramTab    project={project} />}
-      {activeTab === 'code-session' && <CodeSessionTab project={project} onProjectChange={setProject} />}
+      <div style={{ flex: 1, overflow: 'auto', padding: theme.spacing.xl }}>
+        <Routes>
+          <Route index element={<OverviewTab groupId={groupId} />} />
+          <Route path="telegram" element={<TelegramTab project={project} />} />
+          <Route path="code" element={<CodeSessionTab project={project} onProjectChange={setProject} />} />
+        </Routes>
+      </div>
+
     </div>
   );
 }

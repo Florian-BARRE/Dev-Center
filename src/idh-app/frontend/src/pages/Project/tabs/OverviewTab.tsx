@@ -1,41 +1,47 @@
 import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { theme } from '../../../theme';
+import { getProject } from '../../../api/projects';
 import { getContextSize } from '../../../api/settings';
 import { startBridge, stopBridge, renewBridge } from '../../../api/bridge';
-import { getProject } from '../../../api/projects';
 import ContextSizeMeter from '../../../components/ContextSizeMeter';
 import CountdownTimer from '../../../components/CountdownTimer';
-import type { Project } from '../../../api/types';
-import type { ContextSizeResponse } from '../../../api/types';
+import StatusBadge from '../../../components/StatusBadge';
+import type { Project, ContextSizeResponse } from '../../../api/types';
 
 interface OverviewTabProps {
-  project: Project;
-  onProjectChange: (updated: Project) => void;
+  groupId: string;
 }
 
-// ── Info card ─────────────────────────────────────────────────────────────────
+// ── Card component ────────────────────────────────────────────────────────────
 
-function InfoCard({ title, accent, children }: { title: string; accent?: string; children: ReactNode }) {
+function Card({ children }: { children: ReactNode }) {
   return (
     <div style={{
       background: theme.colors.surface,
-      border: `1px solid ${accent ? accent + '33' : theme.colors.border}`,
-      borderRadius: theme.radius.lg,
-      padding: '16px',
-      boxShadow: 'none',
+      border: `1px solid ${theme.colors.border}`,
+      borderRadius: theme.radius.md,
+      padding: theme.spacing.lg,
+      marginBottom: theme.spacing.md,
     }}>
-      <div style={{
-        fontSize: '10px',
-        fontFamily: theme.font.sans,
-        fontWeight: theme.font.weight.semibold,
-        color: theme.colors.muted,
-        textTransform: 'uppercase',
-        letterSpacing: '0.1em',
-        marginBottom: '10px',
-      }}>
-        {title}
-      </div>
+      {children}
+    </div>
+  );
+}
+
+// ── Card title ────────────────────────────────────────────────────────────────
+
+function CardTitle({ children }: { children: ReactNode }) {
+  return (
+    <div style={{
+      fontSize: theme.fontSize.xs,
+      fontWeight: theme.fontWeight.medium,
+      color: theme.colors.textSecondary,
+      textTransform: 'uppercase',
+      letterSpacing: '0.08em',
+      marginBottom: theme.spacing.md,
+      fontFamily: theme.font.sans,
+    }}>
       {children}
     </div>
   );
@@ -43,251 +49,280 @@ function InfoCard({ title, accent, children }: { title: string; accent?: string;
 
 // ── Action button ─────────────────────────────────────────────────────────────
 
-type BtnVariant = 'primary' | 'danger' | 'secondary';
+type ActionBtnVariant = 'start' | 'stop' | 'renew';
 
-function ActionBtn({
-  variant, disabled, onClick, children
-}: { variant: BtnVariant; disabled: boolean; onClick: () => void; children: ReactNode }) {
-  const bg =
-    variant === 'primary' ? theme.colors.accent :
-    variant === 'danger'  ? theme.colors.danger :
-    theme.colors.surfaceElevated;
-  const color =
-    variant === 'secondary' ? theme.colors.text : theme.colors.onPrimary;
-  const border =
-    variant === 'secondary' ? `1px solid ${theme.colors.borderAccent}` : 'none';
+function ActionButton({
+  variant,
+  disabled,
+  onClick,
+}: {
+  variant: ActionBtnVariant;
+  disabled: boolean;
+  onClick: () => void;
+}) {
+  const styleMap: Record<ActionBtnVariant, React.CSSProperties> = {
+    start: {
+      background: theme.colors.active,
+      color: theme.colors.bg,
+      border: 'none',
+    },
+    stop: {
+      background: 'none',
+      color: theme.colors.danger,
+      border: `1px solid ${theme.colors.danger}55`,
+    },
+    renew: {
+      background: 'none',
+      color: theme.colors.text,
+      border: `1px solid ${theme.colors.borderStrong}`,
+    },
+  };
+
+  const labelMap: Record<ActionBtnVariant, string> = {
+    start: 'Start',
+    stop: 'Stop',
+    renew: 'Renew',
+  };
 
   return (
     <button
       onClick={onClick}
       disabled={disabled}
       style={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: '6px',
-        padding: '7px 14px',
-        background: bg,
-        color: color,
-        border: border,
+        ...styleMap[variant],
+        padding: `${theme.spacing.xs} ${theme.spacing.md}`,
         borderRadius: theme.radius.md,
-        fontSize: theme.font.size.sm,
+        fontSize: theme.fontSize.xs,
         fontFamily: theme.font.sans,
-        fontWeight: theme.font.weight.medium,
+        fontWeight: theme.fontWeight.medium,
         cursor: disabled ? 'not-allowed' : 'pointer',
         opacity: disabled ? 0.6 : 1,
-        transition: theme.transition.fast,
       }}
     >
-      {children}
+      {labelMap[variant]}
     </button>
   );
 }
 
 // ── OverviewTab ───────────────────────────────────────────────────────────────
 
-export default function OverviewTab({ project, onProjectChange }: OverviewTabProps) {
+export default function OverviewTab({ groupId }: OverviewTabProps) {
+  const [project, setProject] = useState<Project | null>(null);
   const [contextSize, setContextSize] = useState<ContextSizeResponse | null>(null);
-  const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [actionBusy, setActionBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
 
-  const isActive = project.bridge !== null;
-
-  // 1. Load context size on mount
+  // 1. Load project and context size on mount
   useEffect(() => {
-    getContextSize(project.groupId)
+    if (!groupId) return;
+    getProject(groupId)
+      .then(setProject)
+      .catch(() => setProject(null));
+    getContextSize(groupId)
       .then(setContextSize)
       .catch(() => setContextSize(null));
-  }, [project.groupId]);
+  }, [groupId]);
 
   // 2. Bridge action helper — calls fn, then refreshes project
-  const act = async (label: string, fn: () => Promise<unknown>) => {
-    setActionLoading(label);
+  const act = async (fn: () => Promise<unknown>) => {
+    if (actionBusy || !project) return;
+    setActionBusy(true);
     setActionError(null);
     try {
       await fn();
-      const updated = await getProject(project.groupId);
-      onProjectChange(updated);
-    } catch (e) {
-      setActionError(e instanceof Error ? e.message : 'Action failed');
+      const updated = await getProject(groupId);
+      setProject(updated);
+    } catch (err) {
+      setActionError('Action failed. Please try again.');
     } finally {
-      setActionLoading(null);
+      setActionBusy(false);
     }
   };
 
+  if (!project) {
+    return (
+      <div style={{ color: theme.colors.muted, fontSize: theme.fontSize.sm, fontFamily: theme.font.sans }}>
+        Loading…
+      </div>
+    );
+  }
+
+  const isActive = project.bridge !== null;
   const modelLabel = project.modelOverride
-    ? `${project.modelOverride.model}`
+    ? project.modelOverride.model
     : 'default';
 
+  // Named style for the "Always active" badge — kept manual since StatusBadge
+  // shows "SESSION ACTIVE", which is a different label for a different purpose.
+  const alwaysActiveBadgeStyle: React.CSSProperties = {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '5px',
+    padding: '2px 8px',
+    borderRadius: theme.radius.sm,
+    fontSize: theme.fontSize.xs,
+    fontWeight: theme.fontWeight.medium,
+    fontFamily: theme.font.sans,
+    color: theme.colors.active,
+    background: theme.colors.active + '1a',
+    border: `1px solid ${theme.colors.active}33`,
+    textTransform: 'uppercase',
+    letterSpacing: '0.05em',
+  };
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-      {/* Project identity */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-        <span style={{
-          fontFamily: theme.font.display,
-          fontWeight: theme.font.weight.bold,
-          fontSize: theme.font.size.lg,
-          color: theme.colors.text,
-        }}>
-          {project.projectId}
-        </span>
-        <a
-          href={project.repoUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          style={{
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: theme.spacing.lg, alignItems: 'start' }}>
+
+      {/* Left column */}
+      <div>
+        {/* Session code card */}
+        <Card>
+          <CardTitle>Session code</CardTitle>
+          <div style={{ display: 'flex', alignItems: 'center', gap: theme.spacing.sm, marginBottom: theme.spacing.md }}>
+            <StatusBadge status={isActive ? 'active' : 'idle'} />
+            {isActive && project.bridge && (
+              <CountdownTimer expiresAt={project.bridge.expiresAt} />
+            )}
+          </div>
+          <div style={{ display: 'flex', gap: theme.spacing.sm }}>
+            {!isActive && (
+              <ActionButton
+                variant="start"
+                disabled={actionBusy}
+                onClick={() => act(() => startBridge(groupId))}
+              />
+            )}
+            {isActive && (
+              <>
+                <ActionButton
+                  variant="stop"
+                  disabled={actionBusy}
+                  onClick={() => act(() => stopBridge(groupId))}
+                />
+                <ActionButton
+                  variant="renew"
+                  disabled={actionBusy}
+                  onClick={() => act(() => renewBridge(groupId))}
+                />
+              </>
+            )}
+          </div>
+          {actionError && (
+            <span style={{ color: theme.colors.danger, fontSize: theme.fontSize.sm, marginTop: theme.spacing.sm, display: 'block' }}>
+              {actionError}
+            </span>
+          )}
+        </Card>
+
+        {/* Session Telegram card */}
+        <Card>
+          <CardTitle>Session Telegram</CardTitle>
+          <div style={{ display: 'flex', alignItems: 'center', gap: theme.spacing.sm, marginBottom: theme.spacing.md }}>
+            {/* Manual "always active" badge — kept separate from StatusBadge
+                because StatusBadge renders "SESSION ACTIVE", not "Always active" */}
+            <span style={alwaysActiveBadgeStyle}>
+              <span style={{
+                width: '5px', height: '5px', borderRadius: '50%',
+                background: theme.colors.active, display: 'inline-block', flexShrink: 0,
+              }} />
+              Always active
+            </span>
+          </div>
+          <div style={{
             fontFamily: theme.font.mono,
-            fontSize: theme.font.size.xs,
-            color: theme.colors.muted,
-            textDecoration: 'none',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
-          }}
-        >
-          {project.repoUrl}
-        </a>
+            fontSize: theme.fontSize.sm,
+            color: theme.colors.textSecondary,
+          }}>
+            {modelLabel}
+          </div>
+        </Card>
       </div>
 
-      {/* Two-column layout */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', alignItems: 'start' }}>
-
-        {/* Left col: project identity + context meter */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-          {/* Context size meter */}
-          {contextSize && (
-            <InfoCard title="Context Budget">
-              <ContextSizeMeter response={contextSize} />
-            </InfoCard>
+      {/* Right column */}
+      <div>
+        {/* Context Budget card */}
+        <Card>
+          <CardTitle>Context budget</CardTitle>
+          {contextSize ? (
+            <ContextSizeMeter response={contextSize} />
+          ) : (
+            <div style={{ color: theme.colors.muted, fontSize: theme.fontSize.sm, fontFamily: theme.font.sans }}>
+              Loading context data…
+            </div>
           )}
+        </Card>
 
-          {/* Bridge info */}
-          <InfoCard title="Bridge" accent={isActive ? theme.colors.success : undefined}>
-            {isActive && project.bridge ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span style={{
-                    width: '8px', height: '8px', borderRadius: '50%',
-                    background: theme.colors.success, display: 'inline-block',
-                    animation: 'pulse 2s infinite',
-                  }} />
-                  <span style={{ fontSize: theme.font.size.sm, color: theme.colors.text, fontWeight: theme.font.weight.medium }}>Active</span>
-                  <span style={{ fontFamily: theme.font.mono, fontSize: theme.font.size.xs, color: theme.colors.muted, marginLeft: 'auto' }}>
-                    PID {project.bridge.pid}
-                  </span>
-                </div>
-                <div style={{ fontFamily: theme.font.mono, fontSize: theme.font.size.xl, color: theme.colors.warning, fontWeight: theme.font.weight.semibold }}>
-                  <CountdownTimer expiresAt={project.bridge.expiresAt} />
-                </div>
-                <div style={{
-                  fontSize: theme.font.size.xs,
+        {/* Project card */}
+        <Card>
+          <CardTitle>Project</CardTitle>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: theme.spacing.sm }}>
+            {/* Repo URL */}
+            <div>
+              <div style={{
+                fontSize: theme.fontSize.xs,
+                color: theme.colors.muted,
+                fontFamily: theme.font.sans,
+                marginBottom: theme.spacing.xs,
+              }}>
+                Repository
+              </div>
+              <a
+                href={project.repoUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  fontSize: theme.fontSize.sm,
                   fontFamily: theme.font.mono,
-                  color: theme.colors.muted,
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap',
-                }} title={project.bridge.workspace}>
-                  {project.bridge.workspace}
-                </div>
-              </div>
-            ) : (
-              <div style={{ fontSize: theme.font.size.sm, color: theme.colors.muted }}>No bridge running</div>
-            )}
-          </InfoCard>
+                  color: theme.colors.textSecondary,
+                  textDecoration: 'none',
+                  wordBreak: 'break-all',
+                }}
+              >
+                {project.repoUrl}
+              </a>
+            </div>
 
-          {/* Schedule info */}
-          {project.schedule && (
-            <InfoCard title="Schedule">
-              <div style={{ fontSize: theme.font.size.xs, color: theme.colors.muted }}>
-                {project.schedule.enabled
-                  ? `${project.schedule.renewalTimes.length} renewal time${project.schedule.renewalTimes.length !== 1 ? 's' : ''} configured`
-                  : 'Schedule disabled'}
+            {/* Group ID */}
+            <div>
+              <div style={{
+                fontSize: theme.fontSize.xs,
+                color: theme.colors.muted,
+                fontFamily: theme.font.sans,
+                marginBottom: theme.spacing.xs,
+              }}>
+                Group ID
               </div>
-            </InfoCard>
-          )}
-        </div>
-
-        {/* Right col: model + quick actions */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-          {/* Model info */}
-          <InfoCard title="AI Model" accent={theme.colors.purple}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <span style={{
-                width: '8px', height: '8px', borderRadius: '50%',
-                background: theme.colors.purple, display: 'inline-block',
-              }} />
-              <span style={{ fontSize: theme.font.size.sm, color: theme.colors.text, fontWeight: theme.font.weight.medium }}>
-                Telegram Agent
+                fontSize: theme.fontSize.sm,
+                fontFamily: theme.font.mono,
+                color: theme.colors.textSecondary,
+              }}>
+                {project.groupId}
               </span>
             </div>
-            <div style={{
-              marginTop: '8px',
-              padding: '4px 10px',
-              display: 'inline-block',
-              background: theme.colors.purpleDim,
-              border: `1px solid ${theme.colors.purple}33`,
-              borderRadius: theme.radius.sm,
-              fontFamily: theme.font.mono,
-              fontSize: theme.font.size.xs,
-              color: theme.colors.purple,
-            }}>
-              {modelLabel}
-            </div>
-            <div style={{ marginTop: '8px', fontSize: theme.font.size.xs, fontFamily: theme.font.mono, color: theme.colors.muted }}>
-              Group {project.groupId}
-            </div>
-          </InfoCard>
 
-          {/* Quick actions */}
-          <InfoCard title="Quick Actions">
-            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-              {!isActive && (
-                <ActionBtn
-                  variant="primary"
-                  disabled={actionLoading !== null}
-                  onClick={() => act('start', () => startBridge(project.groupId))}
-                >
-                  <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-                  {actionLoading === 'start' ? 'Starting…' : 'Start Bridge'}
-                </ActionBtn>
-              )}
-              {isActive && (
-                <>
-                  <ActionBtn
-                    variant="secondary"
-                    disabled={actionLoading !== null}
-                    onClick={() => act('renew', () => renewBridge(project.groupId))}
-                  >
-                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
-                    {actionLoading === 'renew' ? 'Renewing…' : 'Renew'}
-                  </ActionBtn>
-                  <ActionBtn
-                    variant="danger"
-                    disabled={actionLoading !== null}
-                    onClick={() => act('stop', () => stopBridge(project.groupId))}
-                  >
-                    <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>
-                    {actionLoading === 'stop' ? 'Stopping…' : 'Stop Bridge'}
-                  </ActionBtn>
-                </>
-              )}
+            {/* Project ID */}
+            <div>
+              <div style={{
+                fontSize: theme.fontSize.xs,
+                color: theme.colors.muted,
+                fontFamily: theme.font.sans,
+                marginBottom: theme.spacing.xs,
+              }}>
+                Project ID
+              </div>
+              <span style={{
+                fontSize: theme.fontSize.sm,
+                fontFamily: theme.font.mono,
+                color: theme.colors.textSecondary,
+              }}>
+                {project.projectId}
+              </span>
             </div>
-          </InfoCard>
-        </div>
+          </div>
+        </Card>
       </div>
 
-      {/* Action error */}
-      {actionError && (
-        <div style={{
-          padding: '8px 12px',
-          background: theme.colors.dangerBg,
-          border: `1px solid ${theme.colors.danger}44`,
-          borderRadius: theme.radius.sm,
-          color: theme.colors.danger,
-          fontSize: theme.font.size.sm,
-        }}>
-          {actionError}
-        </div>
-      )}
     </div>
   );
 }
