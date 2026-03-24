@@ -32,22 +32,22 @@ function StepIndicator({ current }: { current: Step }) {
               borderRadius: '50%',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               background: isDone
-                ? theme.colors.success
+                ? theme.colors.active
                 : isActive
                 ? theme.colors.accent
-                : theme.colors.surfaceElevated,
+                : theme.colors.surface,
               border: isDone
-                ? `1px solid ${theme.colors.success}`
+                ? `1px solid ${theme.colors.active}`
                 : isActive
                 ? `1px solid ${theme.colors.accent}`
                 : `1px solid ${theme.colors.border}`,
-              color: isDone || isActive ? theme.colors.onPrimary : theme.colors.muted,
-              fontSize: theme.font.size.sm,
+              color: isDone || isActive ? theme.colors.bg : theme.colors.muted,
+              fontSize: theme.fontSize.sm,
               fontFamily: theme.font.mono,
-              fontWeight: theme.font.weight.semibold,
+              fontWeight: theme.fontWeight.semibold,
               flexShrink: 0,
               boxShadow: 'none',
-              transition: theme.transition.base,
+              transition: 'none',
             }}>
               {isDone ? '✓' : s.label}
             </div>
@@ -59,10 +59,10 @@ function StepIndicator({ current }: { current: Step }) {
               marginLeft: '-20px',
               width: '70px',
               textAlign: 'center',
-              fontSize: theme.font.size.xs,
+              fontSize: theme.fontSize.xs,
               fontFamily: theme.font.sans,
               color: isActive ? theme.colors.text : theme.colors.muted,
-              fontWeight: isActive ? theme.font.weight.semibold : theme.font.weight.normal,
+              fontWeight: isActive ? theme.fontWeight.semibold : theme.fontWeight.normal,
               pointerEvents: 'none',
             }}>
               {s.title}
@@ -72,7 +72,7 @@ function StepIndicator({ current }: { current: Step }) {
             {i < STEP_META.length - 1 && (
               <div style={{
                 width: '60px', height: '1px',
-                background: isDone ? theme.colors.success : theme.colors.border,
+                background: isDone ? theme.colors.active : theme.colors.border,
                 margin: '0 4px',
                 transition: 'background 0.3s ease',
               }} />
@@ -121,7 +121,7 @@ export default function NewProjectPage() {
         alignItems: 'center',
         gap: '6px',
         marginBottom: '24px',
-        fontSize: theme.font.size.xs,
+        fontSize: theme.fontSize.xs,
         fontFamily: theme.font.mono,
         color: theme.colors.muted,
       }}>
@@ -141,14 +141,14 @@ export default function NewProjectPage() {
         }}>
           <h1 style={{
             margin: 0,
-            fontFamily: theme.font.display,
-            fontWeight: theme.font.weight.bold,
-            fontSize: theme.font.size.xl,
+            fontFamily: theme.font.sans,
+            fontWeight: theme.fontWeight.semibold,
+            fontSize: theme.fontSize.xl,
             color: theme.colors.text,
           }}>
             New Project
           </h1>
-          <p style={{ margin: '6px 0 0', fontSize: theme.font.size.sm, color: theme.colors.muted }}>
+          <p style={{ margin: '6px 0 0', fontSize: theme.fontSize.sm, color: theme.colors.muted }}>
             Connect a Git repository to a Telegram coding agent
           </p>
         </div>
@@ -162,13 +162,13 @@ export default function NewProjectPage() {
         <div style={{
           background: theme.colors.surface,
           border: `1px solid ${theme.colors.border}`,
-          borderRadius: theme.radius.xl,
+          borderRadius: theme.radius.lg,
           padding: '24px',
           boxShadow: 'none',
         }}>
           {/* Step label */}
           <div style={{
-            fontSize: theme.font.size.xs,
+            fontSize: theme.fontSize.xs,
             fontFamily: theme.font.mono,
             color: theme.colors.muted,
             marginBottom: '16px',

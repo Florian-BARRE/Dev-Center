@@ -12,7 +12,7 @@ interface ModelStepProps {
 export default function ModelStep({ provider, model, onChange, onBack, onNext }: ModelStepProps) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-      <p style={{ color: theme.colors.muted, margin: 0, fontSize: theme.font.size.md }}>
+      <p style={{ color: theme.colors.muted, margin: 0, fontSize: theme.fontSize.md }}>
         Choose the AI model for the Telegram coding agent.
       </p>
       <ModelSelector provider={provider} model={model} onChange={onChange} />
@@ -21,14 +21,14 @@ export default function ModelStep({ provider, model, onChange, onBack, onNext }:
           onClick={onBack}
           style={{
             padding: '8px 20px',
-            border: `1px solid ${theme.colors.borderAccent}`,
+            border: `1px solid ${theme.colors.border}`,
             background: 'transparent',
             color: theme.colors.text,
             borderRadius: theme.radius.md,
             cursor: 'pointer',
-            fontSize: theme.font.size.md,
+            fontSize: theme.fontSize.md,
             fontFamily: theme.font.sans,
-            transition: theme.transition.fast,
+            transition: 'none',
           }}
         >
           ← Back
@@ -38,14 +38,14 @@ export default function ModelStep({ provider, model, onChange, onBack, onNext }:
           style={{
             padding: '8px 24px',
             background: theme.colors.accent,
-            color: theme.colors.onPrimary,
+            color: theme.colors.bg,
             border: 'none',
             borderRadius: theme.radius.md,
             cursor: 'pointer',
-            fontSize: theme.font.size.md,
+            fontSize: theme.fontSize.md,
             fontFamily: theme.font.sans,
-            fontWeight: theme.font.weight.semibold,
-            transition: theme.transition.fast,
+            fontWeight: theme.fontWeight.semibold,
+            transition: 'none',
           }}
         >
           Next →
