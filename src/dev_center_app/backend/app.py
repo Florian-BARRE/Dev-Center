@@ -3,7 +3,7 @@
 
 from fastapi import FastAPI
 from .lifespan import lifespan
-from .routers import health_router, projects_router, sessions_router, memory_router
+from .routers import health_router, projects_router, sessions_router, memory_router, rules_router
 
 
 def create_app(app_name: str, debug: bool) -> FastAPI:
@@ -25,6 +25,7 @@ def create_app(app_name: str, debug: bool) -> FastAPI:
     app.include_router(projects_router, prefix=prefix)
     app.include_router(sessions_router, prefix=prefix)
     app.include_router(memory_router, prefix=prefix)
+    app.include_router(rules_router, prefix=prefix)
 
     return app
 
