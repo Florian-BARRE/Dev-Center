@@ -13,6 +13,12 @@ from .memory import memory_router
 # ------------------- Rules ---------------------- #
 from .rules import rules_router
 
+# -------------------- Auth ---------------------- #
+from .auth import auth_router
+
+# ------------------ Monitoring ------------------ #
+from .monitoring import monitoring_router
+
 # ------------------- Public API ----------------- #
 __all__ = [
     "health_router",
@@ -20,4 +26,6 @@ __all__ = [
     "sessions_router",
     "memory_router",
     "rules_router",
+    "auth_router",
+    "monitoring_router",
 ]
