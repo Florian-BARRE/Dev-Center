@@ -86,8 +86,8 @@ const plugin = {
 
     // ── Hooks ─────────────────────────────────────────────────────────────
 
-    api.registerHook("before_model_resolve", buildModelResolverHook(stateReader));
-    api.registerHook("before_prompt_build", buildPromptBuilderHook(stateReader));
+    api.registerHook("before_model_resolve", buildModelResolverHook(stateReader), { name: "idh-model-resolver" } as never);
+    api.registerHook("before_prompt_build", buildPromptBuilderHook(stateReader), { name: "idh-prompt-builder" } as never);
 
     // ── Inbound webhook ───────────────────────────────────────────────────
 
