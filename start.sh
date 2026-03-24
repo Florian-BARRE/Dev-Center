@@ -233,9 +233,12 @@ else
         | grep -oE '"[0-9]+"' | head -1 | tr -d '"' || echo "")
 
     if [ "$STORED_TOKEN" != "$TELEGRAM_BOT_TOKEN" ] || [ "$STORED_USER" != "$TELEGRAM_USER_ID" ]; then
-        log "Telegram credentials changed — regenerating openclaw.json ..."
-        _write_openclaw_json
-        log "  [OK] openclaw.json updated."
+        log "Telegram credentials changed — updating botToken and allowFrom in openclaw.json ..."
+        # Update only the token and allowFrom fields in-place, preserving all other settings
+        # (groups allowlist, gateway config, etc.) that OpenClaw may have written.
+        perl -i -pe "s|\"botToken\": *\"[^\"]*\"|\"botToken\": \"${TELEGRAM_BOT_TOKEN}\"|" "$OPENCLAW_JSON"
+        perl -i -pe "s|\"allowFrom\": *\[[^\]]*\]|\"allowFrom\": [\"${TELEGRAM_USER_ID}\"]|" "$OPENCLAW_JSON"
+        log "  [OK] openclaw.json credentials updated (groups and other settings preserved)."
     else
         log "  [OK] openclaw.json is up to date."
     fi
@@ -321,23 +324,17 @@ done
 [ "$HEALTHY" = true ] || err "idh-app did not become healthy after 90s — check: docker compose logs idh-app"
 
 # ─────────────────────────────────────────────────────────────
-# Step 10 — Install IDH plugin in openclaw-gateway
+# Step 10 — IDH plugin (handled automatically by Docker Compose)
 #
-# Idempotent — safe to run on every start, including subsequent runs.
+# The idh-plugin-installer init container (defined in docker-compose.yml)
+# runs before openclaw-gateway on every compose up. It copies the plugin
+# source from ./plugin/idh into a named Docker volume (idh-plugin-ext)
+# with Linux-native ownership (node:node, mode 755) so OpenClaw's
+# world-writable security check passes.
+#
+# No manual install step needed here.
 # ─────────────────────────────────────────────────────────────
-log "Installing IDH plugin in openclaw-gateway ..."
-docker compose --env-file services/common/.env exec openclaw-gateway sh -c \
-    'openclaw plugins install /home/node/.openclaw/plugins/idh' || \
-    warn "Plugin install step failed — check: docker compose logs openclaw-gateway"
-
-# Fix permissions: Docker Desktop on Windows mounts all files as 777 (world-writable).
-# OpenClaw's security scanner blocks world-writable plugin files.
-# Chmod 755 the installed extension to satisfy the security check.
-log "Fixing plugin file permissions ..."
-docker compose --env-file services/common/.env exec openclaw-gateway sh -c \
-    'chmod -R 755 /home/node/.openclaw/extensions/idh-projects/' && \
-    log "  [OK] Plugin permissions fixed." || \
-    warn "  Permission fix failed — plugin may not load."
+log "  [OK] IDH plugin managed by idh-plugin-installer (see docker-compose.yml)."
 
 # ─────────────────────────────────────────────────────────────
 # Done
