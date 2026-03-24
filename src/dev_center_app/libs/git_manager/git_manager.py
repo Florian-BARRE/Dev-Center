@@ -103,6 +103,15 @@ class GitManager(LoggerClass):
         else:
             self.logger.info(f"Clone completed for '{project_id}'")
 
+    def finish_clone_queue(self, project_id: str) -> None:
+        """
+        Remove the clone progress queue for a completed or failed clone.
+
+        Args:
+            project_id (str): Project slug.
+        """
+        self._clone_queues.pop(project_id, None)
+
     def cleanup(self, project_id: str) -> None:
         """
         Remove the workspace directory for a project (cleanup on clone failure).

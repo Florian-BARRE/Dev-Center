@@ -2,7 +2,7 @@
 # Pydantic models for the /projects router.
 
 from __future__ import annotations
-from typing import Any
+from typing import Any, Literal
 from libs.state.models import _CamelModel, ScheduleConfig
 
 
@@ -19,7 +19,7 @@ class ProjectResponse(_CamelModel):
         model (str): Model identifier.
         schedule (ScheduleConfig): Session scheduling config.
         session (Any | None): Active SessionState or None.
-        status (str): Computed status — "cloning", "ready", or "active".
+        status (Literal["cloning", "ready", "active"]): Computed status.
     """
 
     id: str
@@ -30,7 +30,7 @@ class ProjectResponse(_CamelModel):
     model: str
     schedule: ScheduleConfig
     session: Any | None
-    status: str
+    status: Literal["cloning", "ready", "active"]
 
 
 class ProjectListResponse(_CamelModel):

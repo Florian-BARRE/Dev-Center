@@ -21,6 +21,57 @@ router = APIRouter()
 _cloning: set[str] = set()
 
 
+async def _run_clone(
+    project_id: str,
+    repo_url: str,
+    clone_queue: asyncio.Queue,
+) -> None:
+    """
+    Background coroutine that streams git clone output and handles success/failure.
+
+    On success: publishes clone.done event.
+    On failure: removes workspace, deletes project from state, publishes clone.done.
+
+    Args:
+        project_id (str): ID of the project being cloned.
+        repo_url (str): GitHub URL to clone.
+        clone_queue (asyncio.Queue): Queue to forward progress lines to WebSocket consumers.
+    """
+    # 1. Stream clone output line-by-line; detect errors
+    success = True
+    error_msg = ""
+    async for line in CONTEXT.git_manager.clone(repo_url, project_id):
+        # Forward every progress line to the queue for WS consumers
+        await clone_queue.put({"type": "progress", "line": line})
+        if line.startswith("[ERROR]"):
+            success = False
+            error_msg = line
+
+    # 2. Push the terminal done message before signalling end-of-stream
+    if success:
+        await clone_queue.put({"type": "done", "success": True})
+    else:
+        await clone_queue.put({"type": "done", "success": False, "error": error_msg})
+
+    # 3. Sentinel: tell tail_clone() the stream is over, then remove the queue entry
+    await clone_queue.put(None)
+    CONTEXT.git_manager.finish_clone_queue(project_id)
+
+    # 4. On failure: remove workspace and project state
+    if not success:
+        CONTEXT.git_manager.cleanup(project_id)
+        CONTEXT.state_manager.delete_project(project_id)
+
+    _cloning.discard(project_id)
+
+    # 5. Publish completion event for monitoring consumers
+    await CONTEXT.event_bus.publish(
+        "clone.done",
+        {"success": success, "error": error_msg},
+        project_id=project_id,
+    )
+
+
 def _to_response(p: Project) -> ProjectResponse:
     """
     Build a ProjectResponse from a Project with computed status field.
@@ -125,43 +176,7 @@ async def create_project(body: CreateProjectRequest) -> ProjectResponse:
     clone_queue = CONTEXT.git_manager.start_clone_queue(project_id)
 
     # 4. Launch clone in a background task — fire-and-forget
-    async def _clone_bg() -> None:
-        """Run git clone and forward progress to the queue."""
-        success = True
-        error_msg = ""
-
-        async for line in CONTEXT.git_manager.clone(body.repo_url, project_id):
-            # Forward every progress line to the queue for WS consumers
-            await clone_queue.put({"type": "progress", "line": line})
-            if line.startswith("[ERROR]"):
-                success = False
-                error_msg = line
-
-        # Push the terminal done message
-        if success:
-            await clone_queue.put({"type": "done", "success": True})
-        else:
-            await clone_queue.put({"type": "done", "success": False, "error": error_msg})
-
-        # Sentinel: tell tail_clone() the stream is over
-        await clone_queue.put(None)
-        CONTEXT.git_manager._clone_queues.pop(project_id, None)
-
-        # On failure: remove workspace and project state
-        if not success:
-            CONTEXT.git_manager.cleanup(project_id)
-            CONTEXT.state_manager.delete_project(project_id)
-
-        _cloning.discard(project_id)
-
-        # Publish completion event for monitoring consumers
-        await CONTEXT.event_bus.publish(
-            "clone.done",
-            {"success": success, "error": error_msg},
-            project_id=project_id,
-        )
-
-    asyncio.create_task(_clone_bg())
+    asyncio.create_task(_run_clone(project_id, body.repo_url, clone_queue))
     return _to_response(project)
 
 
