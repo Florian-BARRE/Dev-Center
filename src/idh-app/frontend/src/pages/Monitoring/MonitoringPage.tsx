@@ -1,330 +1,364 @@
-import { useEffect, useState } from 'react';
-import type { ReactNode } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { theme } from '../../theme';
 import { listProjects } from '../../api/projects';
-import { getTimeline, getActivityLog } from '../../api/monitoring';
-import type { Project, TimelineResponse, ActivityEntry } from '../../api/types';
-import TimelineChart from '../../components/TimelineChart';
+import { getActivityLog } from '../../api/monitoring';
+import type { Project, ActivityEntry } from '../../api/types';
 import ActivityFeed from '../../components/ActivityFeed';
 import EventFeed from '../../components/EventFeed';
 
-// ── Stat card ─────────────────────────────────────────────────────────────────
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
-interface StatCardProps { label: string; value: string | number; sub?: string; accent?: string; icon: ReactNode; }
+/** Returns how many seconds have elapsed since `date`. */
+function secondsAgo(date: Date): number {
+  return Math.floor((Date.now() - date.getTime()) / 1000);
+}
 
-function StatCard({ label, value, sub, accent, icon }: StatCardProps) {
-  const color = accent ?? theme.colors.accent;
+/** Formats elapsed seconds as a human-readable "X seconds ago" string. */
+function formatLastUpdated(date: Date): string {
+  const secs = secondsAgo(date);
+  if (secs < 5) return 'just now';
+  if (secs < 60) return `${secs} seconds ago`;
+  const mins = Math.floor(secs / 60);
+  return `${mins} minute${mins !== 1 ? 's' : ''} ago`;
+}
+
+// ── Stats chip ────────────────────────────────────────────────────────────────
+
+interface StatChipProps {
+  label: string;
+  color: string;
+}
+
+function StatChip({ label, color }: StatChipProps) {
   return (
-    <div style={{
-      background: theme.colors.surface,
-      border: `1px solid ${theme.colors.border}`,
-      borderTop: `2px solid ${color}`,
-      borderRadius: theme.radius.lg,
-      padding: '16px 20px',
-      display: 'flex',
+    <span style={{
+      display: 'inline-flex',
       alignItems: 'center',
-      gap: '14px',
-      boxShadow: 'none',
+      padding: `${theme.spacing.xs} ${theme.spacing.sm}`,
+      background: `${color}18`,
+      border: `1px solid ${color}44`,
+      borderRadius: theme.radius.full,
+      color: color,
+      fontSize: theme.fontSize.xs,
+      fontFamily: theme.font.sans,
+      fontWeight: theme.fontWeight.semibold,
+      letterSpacing: '0.04em',
+      whiteSpace: 'nowrap',
     }}>
-      <div style={{
-        width: '38px', height: '38px',
-        borderRadius: theme.radius.md,
-        background: color + '18',
-        border: `1px solid ${color}30`,
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        color: color, flexShrink: 0,
-      }}>
-        {icon}
-      </div>
-      <div>
-        <div style={{
-          fontSize: '10px',
-          fontFamily: theme.font.sans,
-          color: theme.colors.muted,
-          textTransform: 'uppercase',
-          letterSpacing: '0.1em',
-          fontWeight: theme.font.weight.semibold,
-          marginBottom: '2px',
-        }}>
-          {label}
-        </div>
-        <div style={{
-          fontSize: theme.font.size.xxl,
-          fontFamily: theme.font.display,
-          fontWeight: theme.font.weight.bold,
-          color: color,
-          lineHeight: 1,
-        }}>
-          {value}
-        </div>
-        {sub && (
-          <div style={{ fontSize: theme.font.size.xs, color: theme.colors.muted, marginTop: '2px' }}>{sub}</div>
-        )}
-      </div>
-    </div>
+      {label}
+    </span>
   );
 }
 
-// ── Section wrapper ───────────────────────────────────────────────────────────
+// ── Select dropdown style ─────────────────────────────────────────────────────
 
-function Panel({ title, children, action }: { title: string; children: ReactNode; action?: ReactNode }) {
-  return (
-    <div style={{
-      background: theme.colors.surface,
-      border: `1px solid ${theme.colors.border}`,
-      borderRadius: theme.radius.lg,
-      overflow: 'hidden',
-      boxShadow: 'none',
-    }}>
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        padding: '10px 16px',
-        background: theme.colors.surfaceElevated,
-        borderBottom: `1px solid ${theme.colors.border}`,
-      }}>
-        <span style={{
-          fontSize: '10px',
-          fontFamily: theme.font.sans,
-          fontWeight: theme.font.weight.semibold,
-          color: theme.colors.muted,
-          textTransform: 'uppercase',
-          letterSpacing: '0.1em',
-        }}>
-          {title}
-        </span>
-        {action}
-      </div>
-      <div>{children}</div>
-    </div>
-  );
-}
+const selectStyle: React.CSSProperties = {
+  background: theme.colors.surface,
+  border: `1px solid ${theme.colors.border}`,
+  borderRadius: theme.radius.sm,
+  color: theme.colors.text,
+  fontSize: theme.fontSize.sm,
+  padding: `${theme.spacing.xs} ${theme.spacing.sm}`,
+  cursor: 'pointer',
+  outline: 'none',
+  fontFamily: theme.font.sans,
+};
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function MonitoringPage() {
-  const [projects, setProjects] = useState<Project[] | null>(null);
-  const [timeline, setTimeline] = useState<TimelineResponse | null>(null);
-  const [activityEntries, setActivityEntries] = useState<ActivityEntry[]>([]);
-  const [error, setError] = useState<string | null>(null);
-  const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
-  const [refreshing, setRefreshing] = useState(false);
+  const [projects, setProjects]           = useState<Project[] | null>(null);
+  const [activity, setActivity]           = useState<ActivityEntry[]>([]);
+  const [lastUpdated, setLastUpdated]     = useState<Date>(new Date());
+  const [nowTick, setNowTick]             = useState<number>(0);
+  const [projectFilter, setProjectFilter] = useState<string>('');
+  const [eventFilter, setEventFilter]     = useState<string>('');
 
-  const load = () => {
-    setRefreshing(true);
-    Promise.all([
-      listProjects(),
-      getTimeline(),
-      getActivityLog(200),
-    ]).then(([proj, tl, act]) => {
+  // 1. Load both data sources in parallel on mount and every 30 seconds.
+  const load = useCallback(() => {
+    Promise.all([listProjects(), getActivityLog(200)]).then(([proj, act]) => {
       setProjects(proj);
-      setTimeline(tl);
-      setActivityEntries(act);
-      setLastRefresh(new Date());
-      setRefreshing(false);
-    }).catch((e: Error) => {
-      setError(e.message);
-      setRefreshing(false);
+      setActivity(act);
+      setLastUpdated(new Date());
+    }).catch(() => {
+      // Silently swallow errors — the page shows stale data rather than crashing.
     });
-  };
+  }, []);
 
   useEffect(() => {
     load();
-    const interval = setInterval(load, 15_000);
+    const interval = setInterval(load, 30_000);
     return () => clearInterval(interval);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [load]);
+
+  // 2. Tick every second to keep the "Updated X seconds ago" display fresh.
+  useEffect(() => {
+    const tick = setInterval(() => setNowTick((n) => n + 1), 1000);
+    return () => clearInterval(tick);
   }, []);
 
-  const activeCount = projects?.filter((p) => p.bridge !== null).length ?? 0;
-  const totalCount  = projects?.length ?? 0;
+  // 3. Derive stats from loaded data.
+  const today        = new Date().toISOString().slice(0, 10);
+  const activeCount  = projects?.filter((p) => p.bridge !== null).length ?? 0;
+  const todayEntries = activity.filter((e) => e.timestamp.slice(0, 10) === today);
+  const warnCount    = todayEntries.filter(
+    (e) => e.event === 'warning_sent' || e.level === 'warning',
+  ).length;
+  const errorCount   = todayEntries.filter(
+    (e) => e.event === 'session_stopped' || e.level === 'error',
+  ).length;
 
-  // Derive stats from activity log
-  const today = new Date().toISOString().slice(0, 10);
-  const todayEntries  = activityEntries.filter((e) => e.timestamp.slice(0, 10) === today);
-  const warningCount  = todayEntries.filter((e) => e.level === 'warning').length;
-  const errorCount    = todayEntries.filter((e) => e.level === 'error').length;
+  // 4. Collect unique project IDs for the filter dropdown.
+  const projectIds = Array.from(new Set(activity.map((e) => e.projectId))).sort();
+
+  // 5. Collect unique event types for the event-type filter dropdown.
+  const eventTypes = Array.from(new Set(activity.map((e) => e.event))).sort();
+
+  // 6. Apply client-side filters to the activity entries.
+  const filteredActivity = activity.filter((e) => {
+    if (projectFilter && e.projectId !== projectFilter) return false;
+    if (eventFilter && e.event !== eventFilter) return false;
+    return true;
+  });
+
+  // Suppress the nowTick lint warning — it is used only to trigger re-render.
+  void nowTick;
 
   return (
     <div style={{
-      padding: '32px',
+      padding: theme.spacing['2xl'],
       display: 'flex',
       flexDirection: 'column',
-      gap: '24px',
-      animation: 'fadeIn 0.3s ease',
+      gap: theme.spacing.xl,
     }}>
-      {/* Page header */}
+
+      {/* ── Header row ── */}
       <div style={{
         display: 'flex',
-        alignItems: 'flex-end',
+        alignItems: 'center',
         justifyContent: 'space-between',
-        paddingBottom: '20px',
+        paddingBottom: theme.spacing.xl,
         borderBottom: `1px solid ${theme.colors.border}`,
       }}>
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <h1 style={{
-              margin: 0,
-              fontFamily: theme.font.display,
-              fontWeight: theme.font.weight.bold,
-              fontSize: theme.font.size.xl,
-              color: theme.colors.text,
-              lineHeight: 1.1,
-            }}>
-              Monitoring
-            </h1>
-            {/* Live pulse */}
-            <span style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '5px',
-              padding: '2px 8px',
-              background: theme.colors.successBg,
-              border: `1px solid ${theme.colors.success}30`,
-              borderRadius: theme.radius.full,
-              fontSize: '10px',
-              fontFamily: theme.font.mono,
-              color: theme.colors.success,
-              letterSpacing: '0.06em',
-            }}>
-              <span style={{
-                width: '5px', height: '5px', borderRadius: '50%',
-                background: theme.colors.success,
-                display: 'inline-block',
-                animation: 'pulse 2s infinite',
-              }} />
-              LIVE
-            </span>
-          </div>
-          <p style={{ margin: '5px 0 0', fontSize: theme.font.size.sm, color: theme.colors.muted }}>
-            Real-time activity, session timeline, and system events
-          </p>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <span style={{
-            fontSize: theme.font.size.xs,
-            color: theme.colors.muted,
-            fontFamily: theme.font.mono,
+        {/* Title + LIVE badge */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: theme.spacing.md }}>
+          <h1 style={{
+            margin: 0,
+            fontFamily: theme.font.sans,
+            fontWeight: theme.fontWeight.semibold,
+            fontSize: theme.fontSize.xl,
+            color: theme.colors.text,
+            letterSpacing: '-0.01em',
           }}>
-            Updated {lastRefresh.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+            MONITORING
+          </h1>
+          {/* Pulsing LIVE indicator */}
+          <span style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: theme.spacing.xs,
+            padding: `2px ${theme.spacing.sm}`,
+            background: `${theme.colors.active}18`,
+            border: `1px solid ${theme.colors.active}44`,
+            borderRadius: theme.radius.full,
+            fontSize: theme.fontSize.xs,
+            fontFamily: theme.font.mono,
+            color: theme.colors.active,
+            letterSpacing: '0.08em',
+          }}>
+            <span style={{
+              width: '6px',
+              height: '6px',
+              borderRadius: '50%',
+              background: theme.colors.active,
+              display: 'inline-block',
+              animation: 'pulse 2s infinite',
+            }} />
+            LIVE
+          </span>
+        </div>
+
+        {/* Timestamp + Refresh */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: theme.spacing.md }}>
+          <span style={{
+            fontSize: theme.fontSize.xs,
+            fontFamily: theme.font.mono,
+            color: theme.colors.muted,
+          }}>
+            Updated {formatLastUpdated(lastUpdated)}
           </span>
           <button
             onClick={load}
-            disabled={refreshing}
             style={{
               display: 'inline-flex',
               alignItems: 'center',
-              gap: '6px',
-              padding: '6px 12px',
-              background: theme.colors.surfaceElevated,
+              gap: theme.spacing.xs,
+              padding: `${theme.spacing.xs} ${theme.spacing.sm}`,
+              background: 'none',
               border: `1px solid ${theme.colors.border}`,
               borderRadius: theme.radius.md,
               color: theme.colors.textSecondary,
-              fontSize: theme.font.size.sm,
+              fontSize: theme.fontSize.sm,
               fontFamily: theme.font.sans,
-              cursor: refreshing ? 'not-allowed' : 'pointer',
-              opacity: refreshing ? 0.6 : 1,
-              transition: theme.transition.fast,
+              cursor: 'pointer',
             }}
           >
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
-              style={{ animation: refreshing ? 'spin 1s linear infinite' : 'none' }}>
-              <polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="23 4 23 10 17 10" />
+              <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
             </svg>
             Refresh
           </button>
         </div>
       </div>
 
-      {/* Error */}
-      {error && (
-        <div style={{
-          padding: '10px 16px',
-          background: theme.colors.dangerBg,
-          border: `1px solid ${theme.colors.danger}44`,
-          borderRadius: theme.radius.md,
-          color: theme.colors.danger,
-          fontSize: theme.font.size.sm,
-        }}>
-          Failed to load monitoring data: {error}
-        </div>
-      )}
-
-      {/* Stats row */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '12px' }}>
-        <StatCard
-          label="Active Bridges"
-          value={projects === null ? '…' : activeCount}
-          sub={`${totalCount} projects total`}
-          accent={activeCount > 0 ? theme.colors.success : theme.colors.muted}
-          icon={<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>}
+      {/* ── Stats row ── */}
+      <div style={{
+        display: 'flex',
+        flexWrap: 'wrap',
+        gap: theme.spacing.sm,
+      }}>
+        <StatChip
+          label={`${projects === null ? '…' : activeCount} active`}
+          color={theme.colors.active}
         />
-        <StatCard
-          label="Events Today"
-          value={activityEntries.length === 0 ? '0' : todayEntries.length}
-          sub="from activity log"
-          accent={theme.colors.accent}
-          icon={<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>}
+        <StatChip
+          label={`${todayEntries.length} events today`}
+          color={theme.colors.textSecondary}
         />
-        <StatCard
-          label="Warnings"
-          value={warningCount}
-          sub="sent today"
-          accent={warningCount > 0 ? theme.colors.warning : theme.colors.muted}
-          icon={<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>}
+        <StatChip
+          label={`${warnCount} warnings`}
+          color={theme.colors.warning}
         />
-        <StatCard
-          label="Errors"
-          value={errorCount}
-          sub="in activity log"
-          accent={errorCount > 0 ? theme.colors.danger : theme.colors.muted}
-          icon={<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>}
+        <StatChip
+          label={`${errorCount} errors`}
+          color={theme.colors.danger}
         />
       </div>
 
-      {/* Session Timeline */}
-      <Panel title="Session Timeline">
-        <div style={{ padding: '20px' }}>
-          {timeline ? (
-            timeline.projects.length === 0 ? (
-              <div style={{ color: theme.colors.muted, fontSize: theme.font.size.sm, textAlign: 'center', padding: '20px 0' }}>
-                No session data available
-              </div>
-            ) : (
-              <TimelineChart projects={timeline.projects} />
-            )
-          ) : (
-            <div style={{
-              height: '80px',
-              background: `linear-gradient(90deg, ${theme.colors.surfaceElevated} 0%, #1e1e3a 50%, ${theme.colors.surfaceElevated} 100%)`,
-              backgroundSize: '200% 100%',
-              borderRadius: theme.radius.md,
-              animation: 'shimmer 1.5s infinite',
+      {/* ── 2-column grid: Live Events | Activity Log ── */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: '1fr 1fr',
+        gap: theme.spacing.lg,
+        alignItems: 'start',
+      }}>
+
+        {/* Left — Live Events */}
+        <div style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: theme.spacing.sm,
+        }}>
+          {/* Section header */}
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: theme.spacing.sm,
+            paddingBottom: theme.spacing.xs,
+            borderBottom: `1px solid ${theme.colors.border}`,
+          }}>
+            <span style={{
+              fontSize: theme.fontSize.xs,
+              fontFamily: theme.font.sans,
+              fontWeight: theme.fontWeight.semibold,
+              color: theme.colors.muted,
+              textTransform: 'uppercase',
+              letterSpacing: '0.1em',
+            }}>
+              LIVE EVENTS
+            </span>
+            <span style={{
+              width: '6px',
+              height: '6px',
+              borderRadius: '50%',
+              background: theme.colors.active,
+              display: 'inline-block',
+              animation: 'pulse 2s infinite',
             }} />
+          </div>
+
+          {/* EventFeed manages its own WebSocket connection */}
+          <EventFeed />
+        </div>
+
+        {/* Right — Activity Log */}
+        <div style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: theme.spacing.sm,
+        }}>
+          {/* Section header */}
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            paddingBottom: theme.spacing.xs,
+            borderBottom: `1px solid ${theme.colors.border}`,
+          }}>
+            <span style={{
+              fontSize: theme.fontSize.xs,
+              fontFamily: theme.font.sans,
+              fontWeight: theme.fontWeight.semibold,
+              color: theme.colors.muted,
+              textTransform: 'uppercase',
+              letterSpacing: '0.1em',
+            }}>
+              ACTIVITY LOG
+              {activity.length > 0 && (
+                <span style={{ marginLeft: theme.spacing.sm, color: theme.colors.muted }}>
+                  · {filteredActivity.length}
+                </span>
+              )}
+            </span>
+          </div>
+
+          {/* Filter bar */}
+          <div style={{
+            display: 'flex',
+            gap: theme.spacing.sm,
+            flexWrap: 'wrap',
+          }}>
+            <select
+              value={projectFilter}
+              onChange={(e) => setProjectFilter(e.target.value)}
+              style={selectStyle}
+            >
+              <option value="">All projects</option>
+              {projectIds.map((id) => (
+                <option key={id} value={id}>{id}</option>
+              ))}
+            </select>
+            <select
+              value={eventFilter}
+              onChange={(e) => setEventFilter(e.target.value)}
+              style={selectStyle}
+            >
+              <option value="">All events</option>
+              {eventTypes.map((t) => (
+                <option key={t} value={t}>{t}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Activity entries or empty state */}
+          {filteredActivity.length === 0 ? (
+            <div style={{
+              padding: `${theme.spacing.xl} ${theme.spacing.lg}`,
+              textAlign: 'center',
+              color: theme.colors.muted,
+              fontSize: theme.fontSize.sm,
+              fontFamily: theme.font.sans,
+              background: theme.colors.surface,
+              border: `1px solid ${theme.colors.border}`,
+              borderRadius: theme.radius.lg,
+            }}>
+              No activity recorded
+            </div>
+          ) : (
+            <ActivityFeed entries={filteredActivity} maxHeight="calc(100vh - 320px)" />
           )}
         </div>
-      </Panel>
-
-      {/* Two-column area: Activity Log + Live Events */}
-      <div style={{ display: 'grid', gridTemplateColumns: '3fr 2fr', gap: '16px', alignItems: 'start' }}>
-        {/* Activity Log */}
-        <Panel title={`Activity Log${activityEntries.length > 0 ? ` · ${activityEntries.length} events` : ''}`}>
-          <div style={{ maxHeight: '480px', overflowY: 'auto' }}>
-            {activityEntries.length === 0 && (
-              <div style={{ padding: '24px 16px', color: theme.colors.muted, fontSize: theme.font.size.sm, textAlign: 'center' }}>
-                No activity recorded yet
-              </div>
-            )}
-            <ActivityFeed entries={activityEntries} />
-          </div>
-        </Panel>
-
-        {/* Live Event Feed */}
-        <Panel title="Live Events">
-          <div style={{ padding: '12px' }}>
-            <EventFeed />
-          </div>
-        </Panel>
       </div>
     </div>
   );
