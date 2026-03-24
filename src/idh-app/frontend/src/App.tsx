@@ -66,7 +66,7 @@ function TopNav() {
           fontSize: theme.fontSize.sm,
           fontWeight: theme.fontWeight.medium,
           background: theme.colors.accent,
-          color: '#000',
+          color: theme.colors.bg,
           border: 'none',
           borderRadius: theme.radius.sm,
           padding: '6px 12px',

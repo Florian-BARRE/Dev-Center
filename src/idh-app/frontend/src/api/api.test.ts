@@ -132,10 +132,8 @@ describe('new type shapes', () => {
   it('ScheduleConfig has required fields', () => {
     const c: ScheduleConfig = {
       enabled: false,
-      windows: [],
-      warnLeadMinutes: 60,
-      warnIntervalMinutes: 10,
-      alertTemplate: 'test',
+      ranges: [],
+      days: [],
     };
     expect(c.enabled).toBe(false);
   });

@@ -68,6 +68,11 @@ export function Dashboard() {
   // Derived stats
   const activeCount = projects.filter((p) => p.bridge !== null).length;
   const idleCount = projects.length - activeCount;
+  const expiringSoonCount = projects.filter((p) => {
+    if (!p.bridge?.expiresAt) return false;
+    const remaining = new Date(p.bridge.expiresAt).getTime() - Date.now();
+    return remaining > 0 && remaining < 30 * 60 * 1000;
+  }).length;
 
   if (loading) {
     return (
@@ -85,6 +90,7 @@ export function Dashboard() {
       <div style={{ display: 'flex', gap: theme.spacing.md, marginBottom: theme.spacing['2xl'] }}>
         <StatChip dot="active" count={activeCount} label="active sessions" />
         <StatChip dot="idle" count={idleCount} label="idle projects" />
+        <StatChip dot="warning" count={expiringSoonCount} label="expiring soon" />
         <StatChip count={projects.length} label="total projects" />
       </div>
 
@@ -131,7 +137,7 @@ export function Dashboard() {
 // ── StatChip ──────────────────────────────────────────────────────────────────
 
 interface StatChipProps {
-  dot?: 'active' | 'idle';
+  dot?: 'active' | 'idle' | 'warning';
   count: number;
   label: string;
 }
@@ -149,6 +155,7 @@ function StatChip({ dot, count, label }: StatChipProps) {
     }}>
       {dot === 'active' && <span style={{ color: theme.colors.active }}>●</span>}
       {dot === 'idle' && <span style={{ color: theme.colors.muted }}>○</span>}
+      {dot === 'warning' && <span style={{ color: theme.colors.warning }}>⚠</span>}
       <strong style={{ color: theme.colors.text, fontWeight: theme.fontWeight.semibold }}>{count}</strong>
       {label}
     </div>

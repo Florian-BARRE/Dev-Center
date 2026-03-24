@@ -87,11 +87,8 @@ export const MODEL_OPTIONS: { provider: string; model: string; label: string }[]
 
 export interface ScheduleConfig {
   enabled: boolean;
-  renewalTimes: string[];   // ["08:00", "16:00"] — HH:MM 24h times to auto-renew
+  ranges: Array<{ start: string; end: string }>;
   days: string[];           // ["mon","tue",...] — empty = all days
-  warnLeadMinutes: number;
-  warnIntervalMinutes: number;
-  alertTemplate: string;
 }
 
 export interface GlobalDefaults {

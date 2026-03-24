@@ -27,32 +27,20 @@ type ActiveTab = 'telegram' | 'code';
 
 /** Convert a ScheduleConfig (API shape) into a ScheduleValue (TimeRangeScheduler shape). */
 function scheduleConfigToValue(config: ScheduleConfig): ScheduleValue {
-  // Map pairs of renewalTimes to time ranges (start, end).
-  // If an odd number exists, the last range ends at the start time + 8h heuristic.
-  const ranges = [];
-  for (let i = 0; i < config.renewalTimes.length; i += 2) {
-    const start = config.renewalTimes[i];
-    const end = config.renewalTimes[i + 1] ?? '18:00';
-    ranges.push({ start, end });
-  }
+  // Shapes are identical — conversion is a direct field map.
   return {
     enabled: config.enabled,
-    ranges,
-    days: config.days,
+    ranges: config.ranges ?? [],
+    days: config.days ?? [],
   };
 }
 
-/** Merge a ScheduleValue back into an existing ScheduleConfig, preserving warn settings. */
-function scheduleValueToConfig(value: ScheduleValue, existing: ScheduleConfig): ScheduleConfig {
-  // Flatten ranges back to renewal times (start then end for each range).
-  const renewalTimes: string[] = [];
-  for (const range of value.ranges) {
-    renewalTimes.push(range.start, range.end);
-  }
+/** Convert a ScheduleValue back into a ScheduleConfig for the backend. */
+function scheduleValueToConfig(value: ScheduleValue): ScheduleConfig {
+  // Shapes are identical — conversion is a direct field map.
   return {
-    ...existing,
     enabled: value.enabled,
-    renewalTimes,
+    ranges: value.ranges,
     days: value.days,
   };
 }
@@ -69,6 +57,7 @@ const cardStyle: React.CSSProperties = {
 
 const cardTitleStyle: React.CSSProperties = {
   fontSize: theme.fontSize.xs,
+  fontFamily: theme.font.sans,
   fontWeight: theme.fontWeight.medium,
   color: theme.colors.textSecondary,
   textTransform: 'uppercase',
@@ -258,12 +247,10 @@ export default function SettingsPage() {
   }
 
   async function saveSchedule() {
-    const existing = scheduleConfigRef.current;
-    if (!existing) return;
     setScheduleSaving(true);
     setScheduleError(null);
     try {
-      const updated = scheduleValueToConfig(scheduleValue, existing);
+      const updated = scheduleValueToConfig(scheduleValue);
       await putGlobalScheduling(updated);
       scheduleConfigRef.current = updated;
       flashSaved(setScheduleSaved);

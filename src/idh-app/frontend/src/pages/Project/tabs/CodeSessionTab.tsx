@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { theme } from '../../../theme';
 import ModelSelector from '../../../components/ModelSelector';
 import { TimeRangeScheduler } from '../../../components/TimeRangeScheduler';
-import type { ScheduleValue, TimeRange } from '../../../components/TimeRangeScheduler';
+import type { ScheduleValue } from '../../../components/TimeRangeScheduler';
 import {
   getModel,
   putModel,
@@ -34,39 +34,24 @@ const IDLE_STATE: CardState = { saving: false, saved: false, error: null };
 
 /**
  * Convert a ScheduleConfig (backend) into the ScheduleValue format used by
- * TimeRangeScheduler. renewalTimes is treated as a flat list of alternating
- * start/end times: [start0, end0, start1, end1, …]. Odd trailing values are
- * dropped.
+ * TimeRangeScheduler. The shapes are identical so conversion is trivial.
  */
 function scheduleConfigToValue(config: ScheduleConfig): ScheduleValue {
-  const ranges: TimeRange[] = [];
-  const times = config.renewalTimes ?? [];
-  for (let i = 0; i + 1 < times.length; i += 2) {
-    ranges.push({ start: times[i], end: times[i + 1] });
-  }
   return {
     enabled: config.enabled,
-    ranges,
+    ranges: config.ranges ?? [],
     days: config.days ?? [],
   };
 }
 
 /**
  * Convert a ScheduleValue (from TimeRangeScheduler) back into a ScheduleConfig
- * for the backend. Ranges are flattened into [start0, end0, start1, end1, …].
+ * for the backend. The shapes are identical so conversion is trivial.
  */
-function scheduleValueToConfig(
-  value: ScheduleValue,
-  base: ScheduleConfig,
-): ScheduleConfig {
-  const renewalTimes: string[] = [];
-  for (const range of value.ranges) {
-    renewalTimes.push(range.start, range.end);
-  }
+function scheduleValueToConfig(value: ScheduleValue): ScheduleConfig {
   return {
-    ...base,
     enabled: value.enabled,
-    renewalTimes,
+    ranges: value.ranges,
     days: value.days,
   };
 }
@@ -134,7 +119,6 @@ export default function CodeSessionTab({ groupId }: CodeSessionTabProps) {
 
   // Schedule card state
   const [schedule, setSchedule] = useState<ScheduleValue>(DEFAULT_SCHEDULE);
-  const [scheduleBase, setScheduleBase] = useState<ScheduleConfig | null>(null);
   const [scheduleCard, setScheduleCard] = useState<CardState>(IDLE_STATE);
   const scheduleSavedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -157,7 +141,6 @@ export default function CodeSessionTab({ groupId }: CodeSessionTabProps) {
         setModel(m.model);
       }
       if (s) {
-        setScheduleBase(s);
         setSchedule(scheduleConfigToValue(s));
       }
       setClaudeMd(c.content);
@@ -200,19 +183,9 @@ export default function CodeSessionTab({ groupId }: CodeSessionTabProps) {
   const saveSchedule = async () => {
     setScheduleCard({ saving: true, saved: false, error: null });
     try {
-      // Build a ScheduleConfig from the current ScheduleValue, preserving
-      // backend fields like warnLeadMinutes that the UI does not control.
-      const base: ScheduleConfig = scheduleBase ?? {
-        enabled: false,
-        renewalTimes: [],
-        days: [],
-        warnLeadMinutes: 30,
-        warnIntervalMinutes: 10,
-        alertTemplate: '',
-      };
-      const config = scheduleValueToConfig(schedule, base);
+      // Convert the current ScheduleValue back to a ScheduleConfig for the backend.
+      const config = scheduleValueToConfig(schedule);
       await putProjectSchedule(groupId, config);
-      setScheduleBase(config);
       flashSaved(setScheduleCard, scheduleSavedTimer);
     } catch (e) {
       setScheduleCard({ saving: false, saved: false, error: e instanceof Error ? e.message : 'Failed to save' });
