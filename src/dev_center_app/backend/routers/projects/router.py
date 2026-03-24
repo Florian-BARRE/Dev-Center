@@ -205,13 +205,16 @@ async def update_project(project_id: str, body: UpdateProjectRequest) -> Project
 @auto_handle_errors
 async def delete_project(project_id: str) -> None:
     """
-    Stop session if active, then remove project from state.
+    Stop session if active, remove workspace and project from state.
 
     Args:
         project_id (str): Project slug.
     """
-    # 1. Stop active session (no-op if none)
+    # 1. Stop active session before removing files
     await CONTEXT.session_manager.stop_session(project_id)
 
-    # 2. Remove project from persistent state
+    # 2. Remove workspace directory from disk (no-op if already absent)
+    CONTEXT.git_manager.cleanup(project_id)
+
+    # 3. Remove project entry from state
     CONTEXT.state_manager.delete_project(project_id)

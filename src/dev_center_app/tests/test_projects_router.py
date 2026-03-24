@@ -156,7 +156,7 @@ async def test_update_project_not_found(client):
 
 @pytest.mark.asyncio
 async def test_delete_project(client):
-    """DELETE /projects/{id} removes the project and returns 204."""
+    """DELETE /projects/{id} removes the project, calls cleanup, and returns 204."""
     CONTEXT.state_manager.upsert_project(Project(
         id="to-delete",
         name="to-delete",
@@ -164,9 +164,12 @@ async def test_delete_project(client):
         workspace_path="/w/to-delete",
     ))
 
-    resp = await client.delete("/api/v1/projects/to-delete")
+    with patch.object(CONTEXT.git_manager, "cleanup") as mock_cleanup:
+        resp = await client.delete("/api/v1/projects/to-delete")
+
     assert resp.status_code == 204
     assert CONTEXT.state_manager.get_project("to-delete") is None
+    mock_cleanup.assert_called_once_with("to-delete")
 
 
 @pytest.mark.asyncio
