@@ -63,8 +63,8 @@ def _inject_global_block(content: str, global_rules: str) -> str:
     new_block = f"{GLOBAL_RULES_START}\n{global_rules}\n{GLOBAL_RULES_END}"
     start_idx = content.find(GLOBAL_RULES_START)
     end_idx = content.find(GLOBAL_RULES_END)
-    if start_idx == -1:
-        # No block yet — prepend
+    if start_idx == -1 or end_idx == -1:
+        # No complete block yet — prepend
         return new_block + "\n\n" + content
     return content[:start_idx] + new_block + content[end_idx + len(GLOBAL_RULES_END):]
 
