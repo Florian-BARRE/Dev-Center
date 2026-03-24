@@ -27,7 +27,7 @@ export default function MarkdownEditor({ value, onChange, readOnly, minHeight = 
         readOnly={readOnly}
         theme="dark"
         basicSetup={{ lineNumbers: true, foldGutter: false }}
-        style={{ fontFamily: theme.font.mono, fontSize: theme.font.size.md }}
+        style={{ fontFamily: theme.font.mono, fontSize: theme.fontSize.md }}
       />
     </div>
   );

@@ -266,8 +266,8 @@ export default function ProjectPage() {
       <div style={{ flex: 1, overflow: 'auto', padding: theme.spacing.xl }}>
         <Routes>
           <Route index element={<OverviewTab groupId={groupId} />} />
-          <Route path="telegram" element={<TelegramTab project={project} />} />
-          <Route path="code" element={<CodeSessionTab project={project} onProjectChange={setProject} />} />
+          <Route path="telegram" element={<TelegramTab groupId={groupId} />} />
+          <Route path="code" element={<CodeSessionTab groupId={groupId} />} />
         </Routes>
       </div>
 

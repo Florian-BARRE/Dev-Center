@@ -17,7 +17,7 @@ function statusColor(status: 'active' | 'scheduled' | 'past'): string {
 export default function TimelineChart({ projects }: TimelineChartProps) {
   if (projects.length === 0) {
     return (
-      <div style={{ padding: '16px', textAlign: 'center', color: theme.colors.muted, fontSize: theme.font.size.sm }}>
+      <div style={{ padding: '16px', textAlign: 'center', color: theme.colors.muted, fontSize: theme.fontSize.sm }}>
         No schedule data to display.
       </div>
     );
@@ -39,7 +39,7 @@ export default function TimelineChart({ projects }: TimelineChartProps) {
         }}>
           {/* Project label */}
           <span style={{
-            fontSize: theme.font.size.xs,
+            fontSize: theme.fontSize.xs,
             color: theme.colors.textSecondary,
             fontFamily: theme.font.mono,
             overflow: 'hidden',
@@ -55,7 +55,7 @@ export default function TimelineChart({ projects }: TimelineChartProps) {
           <div style={{
             position: 'relative',
             height: `${ROW_HEIGHT}px`,
-            background: theme.colors.surfaceElevated,
+            background: theme.colors.surface,
             border: `1px solid ${theme.colors.border}`,
             borderRadius: theme.radius.sm,
             overflow: 'hidden',
@@ -103,9 +103,9 @@ export default function TimelineChart({ projects }: TimelineChartProps) {
 
       {/* X-axis label */}
       <div style={{ paddingLeft: '128px', display: 'flex', justifyContent: 'space-between', marginTop: '4px' }}>
-        <span style={{ fontSize: theme.font.size.xs, color: theme.colors.muted, fontFamily: theme.font.mono }}>-24h</span>
-        <span style={{ fontSize: theme.font.size.xs, color: theme.colors.warning, fontFamily: theme.font.mono }}>now</span>
-        <span style={{ fontSize: theme.font.size.xs, color: theme.colors.muted, fontFamily: theme.font.mono }}>+24h</span>
+        <span style={{ fontSize: theme.fontSize.xs, color: theme.colors.muted, fontFamily: theme.font.mono }}>-24h</span>
+        <span style={{ fontSize: theme.fontSize.xs, color: theme.colors.warning, fontFamily: theme.font.mono }}>now</span>
+        <span style={{ fontSize: theme.fontSize.xs, color: theme.colors.muted, fontFamily: theme.font.mono }}>+24h</span>
       </div>
     </div>
   );

@@ -21,7 +21,7 @@ const MAX_RETRY_DELAY = 30_000;
 const LEVEL_COLORS: Record<string, string> = {
   DEBUG:    theme.colors.muted,
   INFO:     theme.colors.accent,
-  SUCCESS:  theme.colors.success,
+  SUCCESS:  theme.colors.active,
   WARNING:  theme.colors.warning,
   ERROR:    theme.colors.danger,
   CRITICAL: theme.colors.danger,
@@ -112,8 +112,8 @@ export default function LogConsole() {
           height: '340px',
           display: 'flex',
           flexDirection: 'column',
-          background: theme.colors.terminalBg,
-          border: `1px solid ${theme.colors.borderAccent}`,
+          background: theme.colors.bg,
+          border: `1px solid ${theme.colors.borderStrong}`,
           borderRadius: theme.radius.lg,
           boxShadow: '0 8px 32px rgba(0,0,0,0.6)',
           zIndex: 9000,
@@ -130,17 +130,17 @@ export default function LogConsole() {
             flexShrink: 0,
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span style={{ color: theme.colors.accent, fontSize: theme.font.size.xs, fontFamily: theme.font.mono }}>
+              <span style={{ color: theme.colors.accent, fontSize: theme.fontSize.xs, fontFamily: theme.font.mono }}>
                 LOGS
               </span>
               <span style={{
                 width: '6px',
                 height: '6px',
                 borderRadius: '50%',
-                background: connected ? theme.colors.success : theme.colors.danger,
+                background: connected ? theme.colors.active : theme.colors.danger,
                 display: 'inline-block',
               }} />
-              <span style={{ color: theme.colors.muted, fontSize: theme.font.size.xs, fontFamily: theme.font.sans }}>
+              <span style={{ color: theme.colors.muted, fontSize: theme.fontSize.xs, fontFamily: theme.font.sans }}>
                 {connected ? 'live' : 'reconnecting…'}
               </span>
             </div>
@@ -152,7 +152,7 @@ export default function LogConsole() {
                   border: `1px solid ${theme.colors.border}`,
                   borderRadius: theme.radius.sm,
                   color: theme.colors.muted,
-                  fontSize: theme.font.size.xs,
+                  fontSize: theme.fontSize.xs,
                   fontFamily: theme.font.sans,
                   padding: '2px 8px',
                   cursor: 'pointer',
@@ -183,7 +183,7 @@ export default function LogConsole() {
             overflowY: 'auto',
             padding: '8px 0',
             fontFamily: theme.font.mono,
-            fontSize: theme.font.size.xs,
+            fontSize: theme.fontSize.xs,
           }}>
             {logs.length === 0 && (
               <div style={{ padding: '12px 16px', color: theme.colors.muted }}>
@@ -210,12 +210,12 @@ export default function LogConsole() {
                   color: levelColor(log.level),
                   flexShrink: 0,
                   width: '52px',
-                  fontWeight: theme.font.weight.semibold,
+                  fontWeight: theme.fontWeight.semibold,
                 }}>
                   {log.level.toUpperCase().slice(0, 7)}
                 </span>
                 {/* Logger name */}
-                <span style={{ color: theme.colors.purple, flexShrink: 0, maxWidth: '80px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                <span style={{ color: theme.colors.textSecondary, flexShrink: 0, maxWidth: '80px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {log.logger}
                 </span>
                 {/* Message */}
@@ -241,9 +241,9 @@ export default function LogConsole() {
           height: '44px',
           borderRadius: '50%',
           background: open ? theme.colors.accent : theme.colors.surface,
-          border: `1px solid ${open ? theme.colors.accent : theme.colors.borderAccent}`,
+          border: `1px solid ${open ? theme.colors.accent : theme.colors.borderStrong}`,
           boxShadow: open
-            ? `0 0 16px ${theme.colors.accentGlow}`
+            ? '0 0 16px rgba(255,255,255,0.15)'
             : '0 4px 16px rgba(0,0,0,0.4)',
           cursor: 'pointer',
           display: 'flex',
@@ -276,7 +276,7 @@ export default function LogConsole() {
             width: '8px',
             height: '8px',
             borderRadius: '50%',
-            background: theme.colors.success,
+            background: theme.colors.active,
             border: `2px solid ${theme.colors.bg}`,
           }} />
         )}

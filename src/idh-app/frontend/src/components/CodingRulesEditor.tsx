@@ -37,12 +37,12 @@ export default function CodingRulesEditor({ value, onChange }: CodingRulesEditor
           onClick={() => fileInputRef.current?.click()}
           style={{
             padding: '4px 10px',
-            background: theme.colors.surfaceElevated,
+            background: theme.colors.surface,
             border: `1px solid ${theme.colors.border}`,
             borderRadius: theme.radius.md,
             color: theme.colors.textSecondary,
             cursor: 'pointer',
-            fontSize: theme.font.size.xs,
+            fontSize: theme.fontSize.xs,
             fontFamily: theme.font.sans,
           }}
         >
@@ -68,7 +68,7 @@ export default function CodingRulesEditor({ value, onChange }: CodingRulesEditor
           borderRadius: theme.radius.md,
           color: theme.colors.text,
           fontFamily: theme.font.mono,
-          fontSize: theme.font.size.sm,
+          fontSize: theme.fontSize.sm,
           padding: '10px 12px',
           resize: 'vertical',
           boxSizing: 'border-box',
@@ -76,7 +76,7 @@ export default function CodingRulesEditor({ value, onChange }: CodingRulesEditor
           lineHeight: 1.6,
         }}
       />
-      <div style={{ marginTop: '6px', fontSize: theme.font.size.xs, color: theme.colors.muted, textAlign: 'right', fontFamily: theme.font.mono }}>
+      <div style={{ marginTop: '6px', fontSize: theme.fontSize.xs, color: theme.colors.muted, textAlign: 'right', fontFamily: theme.font.mono }}>
         {value.length} chars · ~{Math.round(value.length / 4)} tokens
       </div>
     </div>
