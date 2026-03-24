@@ -57,6 +57,12 @@ async def test_start_session_already_active(client):
 
 
 @pytest.mark.asyncio
+async def test_start_session_not_found(client):
+    resp = await client.post("/api/v1/projects/nonexistent/session/start")
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
 async def test_stop_session(client):
     mock_proc = _make_proc(2)
     with patch("asyncio.create_subprocess_exec", new=AsyncMock(return_value=mock_proc)):
@@ -66,3 +72,9 @@ async def test_stop_session(client):
     assert resp.status_code == 204
     p = CONTEXT.state_manager.get_project("myproj")
     assert p.session is None
+
+
+@pytest.mark.asyncio
+async def test_stop_session_not_found(client):
+    resp = await client.post("/api/v1/projects/nonexistent/session/stop")
+    assert resp.status_code == 404
