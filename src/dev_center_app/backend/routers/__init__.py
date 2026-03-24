@@ -19,6 +19,9 @@ from .auth import auth_router
 # ------------------ Monitoring ------------------ #
 from .monitoring import monitoring_router
 
+# ------------------ Settings ------------------- #
+from .settings import settings_router
+
 # ------------------- Public API ----------------- #
 __all__ = [
     "health_router",
@@ -28,4 +31,5 @@ __all__ = [
     "rules_router",
     "auth_router",
     "monitoring_router",
+    "settings_router",
 ]
