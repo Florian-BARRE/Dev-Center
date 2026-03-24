@@ -1,306 +1,313 @@
-import { useEffect, useState } from 'react';
-import type { ReactNode } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { theme } from '../../../theme';
 import ModelSelector from '../../../components/ModelSelector';
-import ScheduleEditor from '../../../components/ScheduleEditor';
-import CountdownTimer from '../../../components/CountdownTimer';
-import CodingRulesEditor from '../../../components/CodingRulesEditor';
-import { getModel, putModel, getClaudeMd, putClaudeMd, getProjectSchedule, putProjectSchedule } from '../../../api/settings';
-import { getSessionMemory } from '../../../api/memory';
+import { TimeRangeScheduler } from '../../../components/TimeRangeScheduler';
+import type { ScheduleValue, TimeRange } from '../../../components/TimeRangeScheduler';
+import {
+  getModel,
+  putModel,
+  getClaudeMd,
+  putClaudeMd,
+  getProjectSchedule,
+  putProjectSchedule,
+} from '../../../api/settings';
 import type { ScheduleConfig } from '../../../api/types';
-import { startBridge, stopBridge } from '../../../api/bridge';
-import { getProject } from '../../../api/projects';
-import { ApiError } from '../../../api/client';
 import { MODEL_OPTIONS } from '../../../api/types';
-import type { Project } from '../../../api/types';
+
+// ── Props ─────────────────────────────────────────────────────────────────────
 
 interface CodeSessionTabProps {
-  project: Project;
-  onProjectChange: (updated: Project) => void;
+  groupId: string;
 }
 
-// ── Section card ──────────────────────────────────────────────────────────────
+// ── Card save state ────────────────────────────────────────────────────────────
 
-function SectionCard({ title, action, children }: { title: string; action?: ReactNode; children: ReactNode }) {
-  return (
-    <div style={{
-      background: theme.colors.surface,
-      border: `1px solid ${theme.colors.border}`,
-      borderRadius: theme.radius.lg,
-      overflow: 'hidden',
-      boxShadow: 'none',
-    }}>
-      <div style={{
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        padding: '8px 16px',
-        borderBottom: `1px solid ${theme.colors.border}`,
-        background: theme.colors.surfaceElevated,
-      }}>
-        <span style={{
-          fontSize: theme.font.size.sm,
-          fontFamily: theme.font.sans,
-          fontWeight: theme.font.weight.semibold,
-          color: theme.colors.text,
-        }}>
-          {title}
-        </span>
-        {action}
-      </div>
-      <div style={{ padding: '16px' }}>{children}</div>
-    </div>
-  );
+interface CardState {
+  saving: boolean;
+  saved: boolean;
+  error: string | null;
 }
 
-function SaveButton({ id, saving, onClick }: { id: string; saving: string | null; onClick: () => void }) {
-  return (
-    <button
-      onClick={onClick}
-      disabled={saving !== null}
-      style={{
-        padding: '4px 12px',
-        background: theme.colors.accent,
-        border: 'none',
-        borderRadius: theme.radius.md,
-        color: theme.colors.onPrimary,
-        cursor: saving !== null ? 'not-allowed' : 'pointer',
-        fontSize: theme.font.size.sm,
-        fontFamily: theme.font.sans,
-        fontWeight: theme.font.weight.medium,
-        opacity: saving !== null && saving !== id ? 0.5 : 1,
-        transition: theme.transition.fast,
-      }}
-    >
-      {saving === id ? 'Saving…' : 'Save'}
-    </button>
-  );
+const IDLE_STATE: CardState = { saving: false, saved: false, error: null };
+
+// ── ScheduleConfig ↔ ScheduleValue mappers ───────────────────────────────────
+
+/**
+ * Convert a ScheduleConfig (backend) into the ScheduleValue format used by
+ * TimeRangeScheduler. renewalTimes is treated as a flat list of alternating
+ * start/end times: [start0, end0, start1, end1, …]. Odd trailing values are
+ * dropped.
+ */
+function scheduleConfigToValue(config: ScheduleConfig): ScheduleValue {
+  const ranges: TimeRange[] = [];
+  const times = config.renewalTimes ?? [];
+  for (let i = 0; i + 1 < times.length; i += 2) {
+    ranges.push({ start: times[i], end: times[i + 1] });
+  }
+  return {
+    enabled: config.enabled,
+    ranges,
+    days: config.days ?? [],
+  };
 }
+
+/**
+ * Convert a ScheduleValue (from TimeRangeScheduler) back into a ScheduleConfig
+ * for the backend. Ranges are flattened into [start0, end0, start1, end1, …].
+ */
+function scheduleValueToConfig(
+  value: ScheduleValue,
+  base: ScheduleConfig,
+): ScheduleConfig {
+  const renewalTimes: string[] = [];
+  for (const range of value.ranges) {
+    renewalTimes.push(range.start, range.end);
+  }
+  return {
+    ...base,
+    enabled: value.enabled,
+    renewalTimes,
+    days: value.days,
+  };
+}
+
+// ── Shared styles ─────────────────────────────────────────────────────────────
+
+const cardStyle: React.CSSProperties = {
+  background: theme.colors.surface,
+  border: `1px solid ${theme.colors.border}`,
+  borderRadius: theme.radius.md,
+  padding: theme.spacing.lg,
+  marginBottom: theme.spacing.xl,
+};
+
+const cardTitleStyle: React.CSSProperties = {
+  fontSize: theme.fontSize.xs,
+  fontFamily: theme.font.sans,
+  fontWeight: theme.fontWeight.medium,
+  color: theme.colors.textSecondary,
+  textTransform: 'uppercase',
+  letterSpacing: '0.08em',
+  marginBottom: theme.spacing.md,
+};
+
+const saveButtonStyle = (disabled: boolean): React.CSSProperties => ({
+  background: theme.colors.accent,
+  color: theme.colors.bg,
+  fontFamily: theme.font.sans,
+  fontWeight: theme.fontWeight.medium,
+  fontSize: theme.fontSize.sm,
+  padding: `${theme.spacing.xs} ${theme.spacing.md}`,
+  border: 'none',
+  borderRadius: theme.radius.sm,
+  cursor: disabled ? 'not-allowed' : 'pointer',
+  opacity: disabled ? 0.6 : 1,
+  marginTop: theme.spacing.md,
+});
+
+const errorStyle: React.CSSProperties = {
+  marginTop: theme.spacing.sm,
+  fontSize: theme.fontSize.xs,
+  fontFamily: theme.font.sans,
+  color: theme.colors.danger,
+};
+
+const savedStyle: React.CSSProperties = {
+  marginTop: theme.spacing.sm,
+  fontSize: theme.fontSize.xs,
+  fontFamily: theme.font.sans,
+  color: theme.colors.active,
+};
+
+// ── Default schedule value when none is loaded ────────────────────────────────
+
+const DEFAULT_SCHEDULE: ScheduleValue = { enabled: false, ranges: [], days: [] };
 
 // ── CodeSessionTab ────────────────────────────────────────────────────────────
 
-export default function CodeSessionTab({ project, onProjectChange }: CodeSessionTabProps) {
-  const [provider, setProvider] = useState(project.modelOverride?.provider ?? MODEL_OPTIONS[0].provider);
-  const [model, setModel] = useState(project.modelOverride?.model ?? MODEL_OPTIONS[0].model);
-  const [claudeMd, setClaudeMd] = useState('');
-  const [schedule, setSchedule] = useState<ScheduleConfig | null>(null);
-  const [sessionMemory, setSessionMemory] = useState('');
-  const [memoryUpdatedAt, setMemoryUpdatedAt] = useState<Date | null>(null);
-  const [saving, setSaving] = useState<string | null>(null);
-  const [actionBusy, setActionBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+export default function CodeSessionTab({ groupId }: CodeSessionTabProps) {
+  // Model card state
+  const [provider, setProvider] = useState(MODEL_OPTIONS[0].provider);
+  const [model, setModel] = useState(MODEL_OPTIONS[0].model);
+  const [modelCard, setModelCard] = useState<CardState>(IDLE_STATE);
+  const modelSavedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // 1. Load model, CLAUDE.md, and schedule on mount
+  // Schedule card state
+  const [schedule, setSchedule] = useState<ScheduleValue>(DEFAULT_SCHEDULE);
+  const [scheduleBase, setScheduleBase] = useState<ScheduleConfig | null>(null);
+  const [scheduleCard, setScheduleCard] = useState<CardState>(IDLE_STATE);
+  const scheduleSavedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // CLAUDE.md card state
+  const [claudeMd, setClaudeMd] = useState('');
+  const [claudeMdCard, setClaudeMdCard] = useState<CardState>(IDLE_STATE);
+  const claudeMdSavedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Load all data on mount
   useEffect(() => {
     let cancelled = false;
     Promise.all([
-      getModel(project.groupId),
-      getClaudeMd(project.groupId).catch(() => ({ content: '' })),
-      getProjectSchedule(project.groupId).catch(() => null),
-    ]).then(([m, c, s]) => {
+      getModel(groupId),
+      getProjectSchedule(groupId).catch(() => null),
+      getClaudeMd(groupId).catch(() => ({ content: '' })),
+    ]).then(([m, s, c]) => {
       if (cancelled) return;
-      if (m.provider) { setProvider(m.provider); setModel(m.model); }
+      if (m.provider) {
+        setProvider(m.provider);
+        setModel(m.model);
+      }
+      if (s) {
+        setScheduleBase(s);
+        setSchedule(scheduleConfigToValue(s));
+      }
       setClaudeMd(c.content);
-      setSchedule(s);
-    }).catch((e: Error) => { if (!cancelled) setError(e.message); });
+    }).catch(() => {
+      // Non-critical — fields remain at defaults
+    });
     return () => { cancelled = true; };
-  }, [project.groupId]);
+  }, [groupId]);
 
-  // 2. Poll SESSION_MEMORY.md every 10 s (read-only viewer)
+  // Cleanup timers on unmount
   useEffect(() => {
-    let cancelled = false;
-    const fetch = () => {
-      getSessionMemory(project.projectId)
-        .then((r) => { if (!cancelled) { setSessionMemory(r.content); setMemoryUpdatedAt(new Date()); } })
-        .catch((e) => { if (!cancelled && e instanceof ApiError && e.status === 404) setSessionMemory(''); });
+    return () => {
+      if (modelSavedTimer.current) clearTimeout(modelSavedTimer.current);
+      if (scheduleSavedTimer.current) clearTimeout(scheduleSavedTimer.current);
+      if (claudeMdSavedTimer.current) clearTimeout(claudeMdSavedTimer.current);
     };
-    fetch();
-    const id = setInterval(fetch, 10_000);
-    return () => { cancelled = true; clearInterval(id); };
-  }, [project.projectId]);
+  }, []);
 
-  const save = async (id: string, fn: () => Promise<unknown>) => {
-    setSaving(id); setError(null);
-    try { await fn(); }
-    catch (e) { setError(e instanceof Error ? e.message : 'Save failed'); }
-    finally { setSaving(null); }
+  const flashSaved = (
+    setCard: React.Dispatch<React.SetStateAction<CardState>>,
+    timerRef: React.MutableRefObject<ReturnType<typeof setTimeout> | null>,
+  ) => {
+    setCard({ saving: false, saved: true, error: null });
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => {
+      setCard(IDLE_STATE);
+    }, 1500);
   };
 
-  // 3. Bridge start / stop
-  const handleStart = async () => {
-    setActionBusy(true); setError(null);
+  const saveModel = async () => {
+    setModelCard({ saving: true, saved: false, error: null });
     try {
-      await startBridge(project.groupId);
-      // Reload project so bridge state is fresh
-      const updated = await getProject(project.groupId);
-      onProjectChange(updated);
-    } catch (e) { setError(e instanceof Error ? e.message : 'Start failed'); }
-    finally { setActionBusy(false); }
+      await putModel(groupId, provider, model);
+      flashSaved(setModelCard, modelSavedTimer);
+    } catch (e) {
+      setModelCard({ saving: false, saved: false, error: e instanceof Error ? e.message : 'Failed to save' });
+    }
   };
 
-  const handleStop = async () => {
-    setActionBusy(true); setError(null);
+  const saveSchedule = async () => {
+    setScheduleCard({ saving: true, saved: false, error: null });
     try {
-      await stopBridge(project.groupId);
-      const updated = await getProject(project.groupId);
-      onProjectChange(updated);
-    } catch (e) { setError(e instanceof Error ? e.message : 'Stop failed'); }
-    finally { setActionBusy(false); }
+      // Build a ScheduleConfig from the current ScheduleValue, preserving
+      // backend fields like warnLeadMinutes that the UI does not control.
+      const base: ScheduleConfig = scheduleBase ?? {
+        enabled: false,
+        renewalTimes: [],
+        days: [],
+        warnLeadMinutes: 30,
+        warnIntervalMinutes: 10,
+        alertTemplate: '',
+      };
+      const config = scheduleValueToConfig(schedule, base);
+      await putProjectSchedule(groupId, config);
+      setScheduleBase(config);
+      flashSaved(setScheduleCard, scheduleSavedTimer);
+    } catch (e) {
+      setScheduleCard({ saving: false, saved: false, error: e instanceof Error ? e.message : 'Failed to save' });
+    }
   };
 
-  const isRunning = project.bridge !== null;
+  const saveClaudeMd = async () => {
+    setClaudeMdCard({ saving: true, saved: false, error: null });
+    try {
+      await putClaudeMd(groupId, claudeMd);
+      flashSaved(setClaudeMdCard, claudeMdSavedTimer);
+    } catch (e) {
+      setClaudeMdCard({ saving: false, saved: false, error: e instanceof Error ? e.message : 'Failed to save' });
+    }
+  };
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '3fr 2fr', gap: '16px', alignItems: 'start' }}>
-      {/* Left panel */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-        {error && (
-          <div style={{
-            padding: '8px 12px',
-            background: theme.colors.dangerBg,
-            border: `1px solid ${theme.colors.danger}44`,
-            borderRadius: theme.radius.sm,
-            color: theme.colors.danger,
-            fontSize: theme.font.size.sm,
-          }}>
-            {error}
-          </div>
-        )}
-
-        {/* Model selector */}
-        <SectionCard
-          title="Session Model"
-          action={
-            <SaveButton
-              id="model"
-              saving={saving}
-              onClick={() => save('model', () => putModel(project.groupId, provider, model))}
-            />
-          }
-        >
-          <ModelSelector provider={provider} model={model} onChange={(p, m) => { setProvider(p); setModel(m); }} />
-        </SectionCard>
-
-        {/* CLAUDE.md editor with multi-file upload */}
-        <SectionCard
-          title="Coding Rules (CLAUDE.md)"
-          action={
-            <SaveButton
-              id="claude-md"
-              saving={saving}
-              onClick={() => save('claude-md', () => putClaudeMd(project.groupId, claudeMd))}
-            />
-          }
-        >
-          <CodingRulesEditor value={claudeMd} onChange={setClaudeMd} />
-        </SectionCard>
-
-        {/* SESSION_MEMORY.md read-only viewer */}
-        <SectionCard title="Session Memory (read-only)">
-          {sessionMemory ? (
-            <pre style={{
-              margin: 0,
-              padding: '10px 12px',
-              background: theme.colors.bg,
-              border: `1px solid ${theme.colors.border}`,
-              borderRadius: theme.radius.md,
-              color: theme.colors.text,
-              fontFamily: theme.font.mono,
-              fontSize: theme.font.size.xs,
-              lineHeight: 1.6,
-              overflowY: 'auto',
-              maxHeight: '300px',
-              whiteSpace: 'pre-wrap',
-              wordBreak: 'break-word',
-            }}>
-              {sessionMemory}
-            </pre>
-          ) : (
-            <div style={{ color: theme.colors.muted, fontSize: theme.font.size.sm, fontFamily: theme.font.sans, fontStyle: 'italic' }}>
-              No session memory yet — updated after each session ends.
-            </div>
-          )}
-          {memoryUpdatedAt && (
-            <div style={{ marginTop: '6px', fontSize: theme.font.size.xs, color: theme.colors.muted, fontFamily: theme.font.mono }}>
-              Last checked: {memoryUpdatedAt.toLocaleTimeString()}
-            </div>
-          )}
-        </SectionCard>
+    <div>
+      {/* Card 1 — Model */}
+      <div style={cardStyle}>
+        <div style={cardTitleStyle}>Model</div>
+        <ModelSelector
+          provider={provider}
+          model={model}
+          onChange={(p, m) => { setProvider(p); setModel(m); }}
+          disabled={modelCard.saving}
+        />
+        <div>
+          <button
+            onClick={saveModel}
+            disabled={modelCard.saving}
+            style={saveButtonStyle(modelCard.saving)}
+          >
+            {modelCard.saving ? 'Saving…' : 'Save'}
+          </button>
+        </div>
+        {modelCard.saved && <div style={savedStyle}>Saved ✓</div>}
+        {modelCard.error && <div style={errorStyle}>{modelCard.error}</div>}
       </div>
 
-      {/* Right panel */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-        {/* Session status */}
-        <SectionCard title="Code Session">
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            {/* Status row */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontSize: theme.font.size.sm, fontFamily: theme.font.sans, color: theme.colors.muted }}>Status</span>
-              <span style={{
-                padding: '2px 8px',
-                borderRadius: theme.radius.full,
-                fontSize: theme.font.size.xs,
-                fontFamily: theme.font.sans,
-                fontWeight: theme.font.weight.semibold,
-                background: isRunning ? `${theme.colors.success}22` : `${theme.colors.muted}22`,
-                color: isRunning ? theme.colors.success : theme.colors.muted,
-              }}>
-                {isRunning ? 'Running' : 'Stopped'}
-              </span>
-            </div>
+      {/* Card 2 — Active Time Ranges */}
+      <div style={cardStyle}>
+        <div style={cardTitleStyle}>Active Time Ranges</div>
+        <TimeRangeScheduler
+          value={schedule}
+          onChange={setSchedule}
+          disabled={scheduleCard.saving}
+        />
+        <div>
+          <button
+            onClick={saveSchedule}
+            disabled={scheduleCard.saving}
+            style={saveButtonStyle(scheduleCard.saving)}
+          >
+            {scheduleCard.saving ? 'Saving…' : 'Save'}
+          </button>
+        </div>
+        {scheduleCard.saved && <div style={savedStyle}>Saved ✓</div>}
+        {scheduleCard.error && <div style={errorStyle}>{scheduleCard.error}</div>}
+      </div>
 
-            {/* PID row */}
-            {project.bridge && (
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontSize: theme.font.size.sm, fontFamily: theme.font.sans, color: theme.colors.muted }}>PID</span>
-                <span style={{ fontSize: theme.font.size.sm, fontFamily: theme.font.mono, color: theme.colors.text }}>
-                  {project.bridge.pid}
-                </span>
-              </div>
-            )}
-
-            {/* Expiry countdown */}
-            {project.bridge && (
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontSize: theme.font.size.sm, fontFamily: theme.font.sans, color: theme.colors.muted }}>Expires</span>
-                <CountdownTimer expiresAt={project.bridge.expiresAt} />
-              </div>
-            )}
-
-            {/* Start / Stop button */}
-            <button
-              onClick={isRunning ? handleStop : handleStart}
-              disabled={actionBusy}
-              style={{
-                marginTop: '4px',
-                padding: '8px 16px',
-                background: isRunning ? theme.colors.dangerBg : theme.colors.accentDim,
-                border: `1px solid ${isRunning ? theme.colors.danger : theme.colors.accent}44`,
-                borderRadius: theme.radius.md,
-                color: isRunning ? theme.colors.danger : theme.colors.accent,
-                cursor: actionBusy ? 'not-allowed' : 'pointer',
-                fontSize: theme.font.size.sm,
-                fontFamily: theme.font.sans,
-                fontWeight: theme.font.weight.semibold,
-                transition: theme.transition.fast,
-                opacity: actionBusy ? 0.6 : 1,
-              }}
-            >
-              {actionBusy ? '…' : isRunning ? 'Stop Session' : 'Start Session'}
-            </button>
-          </div>
-        </SectionCard>
-
-        {/* Schedule editor */}
-        {schedule !== null && (
-          <ScheduleEditor
-            value={schedule}
-            onChange={(updated) => {
-              setSchedule(updated);
-              putProjectSchedule(project.groupId, updated).catch((e: Error) => setError(e.message));
-            }}
-          />
-        )}
+      {/* Card 3 — CLAUDE.md Rules */}
+      <div style={cardStyle}>
+        <div style={cardTitleStyle}>CLAUDE.md Rules</div>
+        <textarea
+          value={claudeMd}
+          onChange={(e) => setClaudeMd(e.target.value)}
+          disabled={claudeMdCard.saving}
+          style={{
+            width: '100%',
+            minHeight: '200px',
+            background: theme.colors.bg,
+            border: `1px solid ${theme.colors.border}`,
+            borderRadius: theme.radius.sm,
+            color: theme.colors.text,
+            fontFamily: theme.font.mono,
+            fontSize: theme.fontSize.sm,
+            padding: theme.spacing.md,
+            resize: 'vertical',
+            boxSizing: 'border-box',
+            outline: 'none',
+            lineHeight: 1.6,
+          }}
+        />
+        <div>
+          <button
+            onClick={saveClaudeMd}
+            disabled={claudeMdCard.saving}
+            style={saveButtonStyle(claudeMdCard.saving)}
+          >
+            {claudeMdCard.saving ? 'Saving…' : 'Save'}
+          </button>
+        </div>
+        {claudeMdCard.saved && <div style={savedStyle}>Saved ✓</div>}
+        {claudeMdCard.error && <div style={errorStyle}>{claudeMdCard.error}</div>}
       </div>
     </div>
   );
