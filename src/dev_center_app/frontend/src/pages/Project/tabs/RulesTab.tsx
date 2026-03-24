@@ -54,18 +54,22 @@ export default function RulesTab({ projectId }: RulesTabProps) {
   const [saving, setSaving] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     getRules(projectId).then((r) => {
       setData(r);
       setDraft(extractProjectRules(r.content));
-    }).catch(() => {});
+    }).catch((err: unknown) => {
+      setError(err instanceof Error ? err.message : 'Failed to load rules.');
+    });
   }, [projectId]);
 
   const save = async () => {
     if (!data || saving) return;
     setSaving(true);
     setSaved(false);
+    setError(null);
     try {
       // Reconstruct full content: global block + project-specific rules
       const globalBlock = data.content.slice(
@@ -78,6 +82,8 @@ export default function RulesTab({ projectId }: RulesTabProps) {
       setDraft(extractProjectRules(updated.content));
       setSaved(true);
       setTimeout(() => setSaved(false), 2_000);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to save rules.');
     } finally {
       setSaving(false);
     }
@@ -86,18 +92,25 @@ export default function RulesTab({ projectId }: RulesTabProps) {
   const sync = async () => {
     if (syncing) return;
     setSyncing(true);
+    setError(null);
     try {
       const updated = await syncRules(projectId);
       setData(updated);
       setDraft(extractProjectRules(updated.content));
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to sync global rules.');
     } finally {
       setSyncing(false);
     }
   };
 
   if (!data) return (
-    <div style={{ color: theme.colors.muted, fontFamily: theme.font.sans, fontSize: theme.fontSize.sm }}>
-      Loading…
+    <div style={{ fontFamily: theme.font.sans, fontSize: theme.fontSize.sm }}>
+      {error !== null ? (
+        <span style={{ color: theme.colors.danger }}>{error}</span>
+      ) : (
+        <span style={{ color: theme.colors.muted }}>Loading…</span>
+      )}
     </div>
   );
 
@@ -209,6 +222,11 @@ export default function RulesTab({ projectId }: RulesTabProps) {
           {saved && (
             <span style={{ color: theme.colors.active, fontSize: theme.fontSize.sm, fontFamily: theme.font.sans }}>
               Saved ✓
+            </span>
+          )}
+          {error && (
+            <span style={{ color: theme.colors.danger, fontSize: theme.fontSize.sm, fontFamily: theme.font.sans }}>
+              {error}
             </span>
           )}
         </div>

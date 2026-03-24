@@ -83,7 +83,7 @@ export default function MemoryTab({ projectId }: MemoryTabProps) {
         borderRadius: theme.radius.md,
         overflow: 'hidden',
       }}>
-        {files.map((f) => (
+        {files.map((f, i) => (
           <button
             key={f.name}
             onClick={() => { setSelected(f); selectedNameRef.current = f.name; }}
@@ -93,7 +93,9 @@ export default function MemoryTab({ projectId }: MemoryTabProps) {
               padding: '10px 14px',
               background: selected?.name === f.name ? theme.colors.surfaceHover : 'none',
               border: 'none',
-              borderBottom: `1px solid ${theme.colors.border}`,
+              // Omit bottom border on the last item to avoid a double-border artifact
+              // against the container's rounded bottom edge.
+              borderBottom: i < files.length - 1 ? `1px solid ${theme.colors.border}` : 'none',
               textAlign: 'left',
               cursor: 'pointer',
             }}
