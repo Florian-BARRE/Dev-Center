@@ -28,8 +28,10 @@ services:
       # Persistent state: projects.json, global-config.json, global-rules.md.
       - ${DATA_ROOT}/data:/data
       # Claude CLI credentials — read-write so token refreshes persist to host.
-      - ~/.claude:/home/app/.claude
-      - ~/.claude.json:/home/app/.claude.json
+      # Mounted at /root/.claude because HOME=/root inside the container.
+      # Claude Code reads credentials from $HOME/.claude by default.
+      - ~/.claude:/root/.claude
+      - ~/.claude.json:/root/.claude.json
       # SSH key for git clone operations (optional; defaults to ~/.ssh).
       # Mounted at /root/.ssh so git finds keys when HOME=/root.
       - ${SSH_KEY_PATH:-~/.ssh}:/root/.ssh:ro
@@ -45,7 +47,7 @@ services:
       # Path configuration injected at runtime.
       - DATA_DIR=/data
       - WORKSPACES_DIR=/workspaces
-      - CLAUDE_DIR=/home/app/.claude
+      - CLAUDE_DIR=/root/.claude
     networks:
       - dev-center-net
 
