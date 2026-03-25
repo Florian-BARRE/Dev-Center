@@ -381,3 +381,12 @@ CHOKIDAR_USEPOLLING=true
 - Frontend is served as static build output by FastAPI
 - Development mode is split for fast iteration (hot reload + HMR)
 - Because of Docker socket mount, deploy only in trusted environments
+
+---
+
+## **Author**
+
+Project created and maintained by **Florian BARRE**.  
+For questions or contributions, feel free to contact me.
+
+[My Website](https://florianbarre.fr/) | [My LinkedIn](www.linkedin.com/in/barre-florian) | [My GitHub](https://github.com/Florian-BARRE)
