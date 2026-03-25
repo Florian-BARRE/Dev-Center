@@ -46,6 +46,8 @@ services:
       - ${DATA_ROOT}/data:/data
       # Claude credentials from the host machine.
       - ${CLAUDE_HOST_DIR:-~/.claude}:/root/.claude
+      # Claude global config/trust file persisted from host.
+      - ${CLAUDE_JSON_HOST_PATH:-~/.claude.json}:/root/.claude.json
       # SSH keys for private git access (read-only by design).
       - ${SSH_KEY_PATH:-~/.ssh}:/root/.ssh:ro
       # Host Docker socket so Claude Code can create project containers.

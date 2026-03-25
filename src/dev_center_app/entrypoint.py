@@ -2,7 +2,7 @@
 # Application entry point — wires all services into CONTEXT and creates the FastAPI app.
 
 import pathlib
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -110,6 +110,11 @@ def _build_app() -> FastAPI:
                 FileResponse: The requested static file or index.html.
             """
             # 1. Try to serve an exact file from the dist root
+            # Never serve index.html for unknown API-like routes.
+            # This avoids returning HTML with status 200 to clients expecting JSON.
+            if full_path == "api" or full_path.startswith("api/"):
+                raise HTTPException(status_code=404, detail="API route not found")
+
             requested = dist / full_path
             if full_path and requested.is_file():
                 return FileResponse(str(requested))

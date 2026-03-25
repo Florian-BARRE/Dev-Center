@@ -1,5 +1,5 @@
 # ====== Code Summary ======
-# SessionManager — lifecycle of claude remote-control subprocesses.
+# SessionManager â€” lifecycle of claude remote-control subprocesses.
 # Includes queue-based log buffering and session recovery on restart.
 
 from __future__ import annotations
@@ -10,6 +10,7 @@ import os
 import pathlib
 import re
 import signal
+import shutil
 from collections import deque
 from collections.abc import AsyncIterator
 from typing import TYPE_CHECKING, Any
@@ -27,9 +28,9 @@ _LOG_BUFFER_MAXLEN = 500
 
 # Regex that matches all ANSI/VT100 escape sequences.
 # Covers:
-#   - CSI sequences: ESC [ <params> <final>  (cursor movement, colors, erase…)
-#   - OSC sequences: ESC ] <data> ST         (hyperlinks, window title…)
-#   - Single-char sequences: ESC <char>      (RIS, IND, NEL…)
+#   - CSI sequences: ESC [ <params> <final>  (cursor movement, colors, eraseâ€¦)
+#   - OSC sequences: ESC ] <data> ST         (hyperlinks, window titleâ€¦)
+#   - Single-char sequences: ESC <char>      (RIS, IND, NELâ€¦)
 _ANSI_ESCAPE_RE = re.compile(
     r"\x1b"                   # ESC
     r"(?:"
@@ -91,7 +92,7 @@ class SessionManager(LoggerClass):
         self._log_subscribers: dict[str, list[asyncio.Queue]] = {}
         self._log_tasks: dict[str, asyncio.Task] = {}
 
-    # ──────────────────────── Private helpers ────────────────────────
+    # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ Private helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     def _get_lock(self, project_id: str) -> asyncio.Lock:
         """Get or create the per-project asyncio.Lock."""
@@ -110,15 +111,66 @@ class SessionManager(LoggerClass):
         """Return current ISO-8601 UTC timestamp."""
         return datetime.datetime.now(datetime.UTC).isoformat()
 
-    def _kill(self, pid: int) -> None:
-        """Send SIGTERM to a process, ignoring not-found and permission errors."""
+    def _signal_pid(self, pid: int, sig: signal.Signals) -> None:
+        """
+        Send a signal to a single PID, ignoring not-found and permission errors.
+
+        Args:
+            pid (int): Process ID.
+            sig (signal.Signals): Signal to send.
+        """
         try:
-            os.kill(pid, signal.SIGTERM)
-            self.logger.info(f"Sent SIGTERM to PID {pid}")
+            os.kill(pid, sig)
+            self.logger.info(f"Sent {sig.name} to PID {pid}")
         except ProcessLookupError:
             self.logger.warning(f"PID {pid} already gone")
         except PermissionError:
             self.logger.warning(f"No permission to signal PID {pid}")
+
+    def _signal_group(self, pgid: int, sig: signal.Signals) -> None:
+        """
+        Send a signal to a process group, ignoring not-found and permission errors.
+
+        Args:
+            pgid (int): Process group ID.
+            sig (signal.Signals): Signal to send.
+        """
+        try:
+            os.killpg(pgid, sig)
+            self.logger.info(f"Sent {sig.name} to process group {pgid}")
+        except ProcessLookupError:
+            self.logger.warning(f"Process group {pgid} already gone")
+        except PermissionError:
+            self.logger.warning(f"No permission to signal process group {pgid}")
+
+    async def _kill_gracefully(self, pid: int, timeout_seconds: float = 4.0) -> None:
+        """
+        Terminate a claude session process group and force-kill if needed.
+
+        Strategy:
+        - Send SIGTERM to process group first, then PID.
+        - Wait briefly for exit.
+        - If still alive, send SIGKILL to group and PID.
+
+        Args:
+            pid (int): Session PID.
+            timeout_seconds (float): Grace period before SIGKILL fallback.
+        """
+        # 1. Best-effort graceful stop
+        self._signal_group(pid, signal.SIGTERM)
+        self._signal_pid(pid, signal.SIGTERM)
+
+        # 2. Wait for process to disappear
+        deadline = asyncio.get_running_loop().time() + timeout_seconds
+        while asyncio.get_running_loop().time() < deadline:
+            if not self._is_claude_process(pid):
+                return
+            await asyncio.sleep(0.2)
+
+        # 3. Hard kill fallback
+        self.logger.warning(f"PID {pid} still alive after SIGTERM grace period â€” sending SIGKILL")
+        self._signal_group(pid, signal.SIGKILL)
+        self._signal_pid(pid, signal.SIGKILL)
 
     def _is_claude_process(self, pid: int) -> bool:
         """
@@ -158,9 +210,40 @@ class SessionManager(LoggerClass):
         # 1. Resolve path to ~/.claude.json
         claude_json_path = self._claude_dir.parent / ".claude.json"
         if not claude_json_path.exists():
-            self.logger.warning(f"~/.claude.json not found at '{claude_json_path}' — cannot pre-trust workspace")
-            return
+            # 1.a Try to restore from the latest Claude backup
+            backups_dir = self._claude_dir / "backups"
+            latest_backup: pathlib.Path | None = None
+            if backups_dir.exists():
+                candidates = sorted(
+                    backups_dir.glob(".claude.json.backup.*"),
+                    key=lambda p: p.stat().st_mtime,
+                    reverse=True,
+                )
+                if candidates:
+                    latest_backup = candidates[0]
 
+            if latest_backup is not None:
+                try:
+                    shutil.copy2(latest_backup, claude_json_path)
+                    self.logger.info(
+                        f"Restored ~/.claude.json from backup '{latest_backup.name}'"
+                    )
+                except OSError as exc:
+                    self.logger.warning(
+                        f"Could not restore '{claude_json_path}' from backup: {exc}"
+                    )
+                    return
+            else:
+                # 1.b No backup available: create a minimal valid config
+                try:
+                    with claude_json_path.open("w", encoding="utf-8") as fh:
+                        json.dump({"projects": {}}, fh, indent=2, ensure_ascii=False)
+                    self.logger.info(f"Created minimal ~/.claude.json at '{claude_json_path}'")
+                except OSError as exc:
+                    self.logger.warning(
+                        f"Could not create missing '{claude_json_path}': {exc}"
+                    )
+                    return
         # 2. Read existing config
         try:
             with claude_json_path.open("r", encoding="utf-8") as fh:
@@ -186,7 +269,7 @@ class SessionManager(LoggerClass):
         except OSError as exc:
             self.logger.warning(f"Could not write '{claude_json_path}': {exc}")
 
-    # ──────────────────────── Log buffer management ──────────────────
+    # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ Log buffer management â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     def _get_log_buffer(self, project_id: str) -> deque[str]:
         """Get or create the log ring buffer for a project."""
@@ -285,7 +368,7 @@ class SessionManager(LoggerClass):
         if task and not task.done():
             task.cancel()
 
-    # ──────────────────────── Public API ─────────────────────────────
+    # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ Public API â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     async def recover_sessions(self) -> None:
         """
@@ -305,20 +388,20 @@ class SessionManager(LoggerClass):
 
             pid = project.session.pid
             if self._is_claude_process(pid):
-                # Same-container restart — process still alive but we can't
+                # Same-container restart â€” process still alive but we can't
                 # re-attach to its stdout pipe.  Clear state so the UI shows
                 # it as stopped; user can manually restart.
                 self.logger.info(
                     f"Session PID {pid} for '{project_id}' still alive after restart "
-                    f"— cannot re-attach stdout, clearing state for clean restart"
+                    f"â€” cannot re-attach stdout, clearing state for clean restart"
                 )
                 project.session = None
                 self._state_manager.upsert_project(project)
-                self._kill(pid)
+                await self._kill_gracefully(pid)
 
             else:
                 self.logger.info(
-                    f"Session PID {pid} for '{project_id}' is gone — restarting"
+                    f"Session PID {pid} for '{project_id}' is gone â€” restarting"
                 )
                 project.session = None
                 self._state_manager.upsert_project(project)
@@ -359,7 +442,7 @@ class SessionManager(LoggerClass):
             workspace = pathlib.Path(project.workspace_path)
             if not workspace.exists():
                 raise RuntimeError(
-                    f"Workspace '{workspace}' does not exist — clone the repository first."
+                    f"Workspace '{workspace}' does not exist â€” clone the repository first."
                 )
 
             # 4. Pre-trust the workspace so the CLI does not block on the trust dialog
@@ -379,9 +462,28 @@ class SessionManager(LoggerClass):
                 cwd=str(workspace),
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.STDOUT,
+                start_new_session=True,
             )
 
-            # 6. Persist session state
+            # 6. Fail fast if the CLI exits immediately (trust/auth/config issues).
+            await asyncio.sleep(0.3)
+            if proc.returncode is not None:
+                tail = ""
+                try:
+                    if proc.stdout is not None:
+                        raw = await proc.stdout.read()
+                        text = raw.decode(errors="replace").strip()
+                        if text:
+                            lines = text.splitlines()
+                            tail = lines[-1]
+                except Exception:
+                    tail = ""
+                detail = f"claude remote-control exited immediately (code={proc.returncode})"
+                if tail:
+                    detail = f"{detail}: {tail}"
+                raise RuntimeError(detail)
+
+            # 7. Persist session state
             session = SessionState(
                 pid=proc.pid,
                 workspace=str(workspace),
@@ -393,10 +495,10 @@ class SessionManager(LoggerClass):
             self._processes[project_id] = proc
             self.logger.info(f"Session PID {proc.pid} started for '{project_id}'")
 
-            # 7. Start background log reader so stdout is consumed even when no viewer
+            # 8. Start background log reader so stdout is consumed even when no viewer
             self._start_log_reader(project_id, proc)
 
-            # 8. Publish event
+            # 9. Publish event
             await self._event_bus.publish(
                 "session.started",
                 {"pid": proc.pid, "workspace": str(workspace), "expires_at": session.expires_at},
@@ -417,7 +519,7 @@ class SessionManager(LoggerClass):
                 return
 
             # 1. Kill subprocess
-            self._kill(project.session.pid)
+            await self._kill_gracefully(project.session.pid)
             self._processes.pop(project_id, None)
 
             # 2. Cancel log reader task
@@ -443,7 +545,7 @@ class SessionManager(LoggerClass):
             if project is None:
                 return
             if project.session is not None:
-                self._kill(project.session.pid)
+                await self._kill_gracefully(project.session.pid)
                 self._processes.pop(project_id, None)
                 self._stop_log_reader(project_id)
                 project.session = None
@@ -516,7 +618,7 @@ class SessionManager(LoggerClass):
             project.session.claude_project_hash = hash_value
             self._state_manager.upsert_project(project)
 
-    # ──────────────────────── Watchdog ───────────────────────────────
+    # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ Watchdog â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     async def _check_expired(self, renew_threshold_minutes: int) -> None:
         """

@@ -46,8 +46,9 @@ Why this is required:
 - Dev Center mounts host Claude credentials into the backend container
 - Session startup fails if credentials are missing or expired
 
-Expected credentials file on host:
+Expected Claude files on host:
 - `~/.claude/.credentials.json`
+- `~/.claude.json` (workspace trust/global config)
 
 ### Step 1 - Create Environment Files
 
@@ -129,6 +130,7 @@ docker compose --env-file services/common/.env -f docker-compose.yml -f docker-c
 |  |  | - ${DATA_ROOT}/workspaces -> /workspaces                       |  |  |
 |  |  | - ${DATA_ROOT}/data       -> /data                             |  |  |
 |  |  | - ${CLAUDE_HOST_DIR}      -> /root/.claude                     |  |  |
+|  |  | - ${CLAUDE_JSON_HOST_PATH}-> /root/.claude.json                |  |  |
 |  |  | - ${SSH_KEY_PATH} (ro)    -> /root/.ssh                        |  |  |
 |  |  | - /var/run/docker.sock    -> /var/run/docker.sock              |  |  |
 |  |  +----------------------------------------------------------------+  |  |
@@ -247,6 +249,7 @@ Treat this as high privilege access on the host.
 | `CODE_SERVER_PORT`    | No        | Prod + Dev | Host port for code-server (browser IDE)                     |
 | `FRONTEND_PORT`       | No        | Dev only   | Host port for Vite dev server                               |
 | `CLAUDE_HOST_DIR`     | No        | Prod + Dev | Host path to Claude credentials directory                   |
+| `CLAUDE_JSON_HOST_PATH` | No      | Prod + Dev | Host path to Claude global config/trust file               |
 | `SSH_KEY_PATH`        | No        | Prod + Dev | Host path to SSH keys directory                             |
 | `CHOKIDAR_USEPOLLING` | No        | Dev only   | Enable polling file watcher if FS events are unreliable     |
 

@@ -15,10 +15,13 @@ export async function apiFetch<T>(
   path: string,
   options: RequestInit = {}
 ): Promise<T> {
+  // 1. Execute request with JSON default headers.
   const res = await fetch(path, {
     headers: { 'Content-Type': 'application/json', ...options.headers },
     ...options,
   });
+
+  // 2. Convert non-2xx responses into ApiError.
   if (!res.ok) {
     let detail = res.statusText;
     try { detail = await res.text(); } catch {
@@ -26,7 +29,20 @@ export async function apiFetch<T>(
     }
     throw new ApiError(res.status, detail);
   }
-  return res.json() as Promise<T>;
+
+  // 3. Handle empty success responses (for example 204 No Content).
+  if (res.status === 204 || res.status === 205) {
+    return undefined as T;
+  }
+
+  // 4. If backend sent no body, return undefined instead of throwing JSON parse errors.
+  const rawBody = await res.text();
+  if (!rawBody) {
+    return undefined as T;
+  }
+
+  // 5. Parse JSON payload for standard API responses.
+  return JSON.parse(rawBody) as T;
 }
 
 /**

@@ -104,6 +104,10 @@ else
     warn "  Claude credentials not found. Sessions will not work until authenticated."
 fi
 
+if [ ! -f "$HOME/.claude.json" ]; then
+    warn "  ~/.claude.json not found on host. Claude may prompt for workspace trust on first run."
+fi
+
 # Step 5: Check SSH key presence for private git repositories.
 log "Checking SSH key ..."
 SSH_DIR="${SSH_KEY_PATH:-$HOME/.ssh}"
