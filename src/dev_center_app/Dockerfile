@@ -37,6 +37,8 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 # Goal:
 # - Install Node dependencies reproducibly with npm ci.
 # - Build the optimised production React+Vite bundle into frontend/dist.
+# - Install the Claude Code CLI globally so it can be copied into the runtime
+#   image without needing Node.js at runtime.
 ###############################################################################
 FROM node:22-bookworm-slim AS ui-build
 
@@ -51,6 +53,11 @@ RUN npm ci
 # Copy frontend source and compile production bundle.
 COPY dev_center_app/frontend/ ./
 RUN npm run build
+
+# Install Claude Code CLI globally.
+# The compiled JS bundle and the `claude` wrapper script will be copied into
+# the runtime image so the session manager can spawn `claude remote-control`.
+RUN npm install -g @anthropic-ai/claude-code
 
 ###############################################################################
 # Stage 3: Runtime image
@@ -71,9 +78,23 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PATH="/opt/venv/bin:${PATH}"
 
-# Install git — required by the git clone feature at runtime.
+# Install runtime system dependencies:
+# - git: required by the git clone feature.
+# - curl: required by the Docker CLI apt repository setup.
+# - docker-ce-cli: Docker client so Claude Code sessions can spawn containers
+#   on the host daemon via the mounted /var/run/docker.sock socket.
 # Clean up apt cache to keep the image minimal.
-RUN apt-get update && apt-get install -y --no-install-recommends git \
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends git curl ca-certificates gnupg \
+    && install -m 0755 -d /etc/apt/keyrings \
+    && curl -fsSL https://download.docker.com/linux/debian/gpg \
+       -o /etc/apt/keyrings/docker.asc \
+    && chmod a+r /etc/apt/keyrings/docker.asc \
+    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] \
+       https://download.docker.com/linux/debian bookworm stable" \
+       > /etc/apt/sources.list.d/docker.list \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends docker-ce-cli \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -87,6 +108,17 @@ COPY dev_center_app /app/dev_center_app
 # Copy compiled React bundle from the frontend builder stage.
 # FastAPI mounts this directory as static files at the root URL.
 COPY --from=ui-build /workspace/dev_center_app/frontend/dist /app/dev_center_app/frontend/dist
+
+# Copy Node.js runtime from the frontend builder stage.
+# Required to execute the Claude Code CLI JS bundle at runtime.
+COPY --from=ui-build /usr/local/bin/node /usr/local/bin/node
+
+# Copy the Claude Code CLI from the frontend builder stage.
+# The global npm install places the package under /usr/local/lib/node_modules
+# and a wrapper script at /usr/local/bin/claude.
+COPY --from=ui-build /usr/local/lib/node_modules/@anthropic-ai/claude-code \
+                     /usr/local/lib/node_modules/@anthropic-ai/claude-code
+COPY --from=ui-build /usr/local/bin/claude /usr/local/bin/claude
 
 EXPOSE 8000
 
