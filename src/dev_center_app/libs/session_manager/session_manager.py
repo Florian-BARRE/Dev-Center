@@ -4,6 +4,7 @@
 from __future__ import annotations
 import asyncio
 import datetime
+import json
 import os
 import pathlib
 import signal
@@ -75,6 +76,54 @@ class SessionManager(LoggerClass):
         """Return current ISO-8601 UTC timestamp."""
         return datetime.datetime.now(datetime.UTC).isoformat()
 
+    def _trust_workspace(self, workspace: pathlib.Path) -> None:
+        """
+        Pre-accept the Claude Code workspace trust dialog for a path.
+
+        Claude Code stores per-project trust in ~/.claude.json under
+        projects[<path>].hasTrustDialogAccepted.  Without this entry the
+        ``claude remote-control`` command refuses to start and asks the user
+        to run ``claude`` interactively first.
+
+        This method writes the trust entry directly so sessions can start
+        unattended inside the container.
+
+        Args:
+            workspace (pathlib.Path): Absolute path to the workspace directory.
+        """
+        # 1. Resolve path to ~/.claude.json
+        claude_json_path = self._claude_dir.parent / ".claude.json"
+        if not claude_json_path.exists():
+            self.logger.warning(f"~/.claude.json not found at '{claude_json_path}' — cannot pre-trust workspace")
+            return
+
+        # 2. Read existing config
+        try:
+            with claude_json_path.open("r", encoding="utf-8") as fh:
+                config: dict = json.load(fh)
+        except (json.JSONDecodeError, OSError) as exc:
+            self.logger.warning(f"Could not read '{claude_json_path}': {exc}")
+            return
+
+        # 3. Ensure projects dict exists and add trust entry
+        projects: dict = config.setdefault("projects", {})
+        ws_key = str(workspace)
+        if not projects.get(ws_key, {}).get("hasTrustDialogAccepted"):
+            projects[ws_key] = {**projects.get(ws_key, {}), "hasTrustDialogAccepted": True}
+            self.logger.info(f"Pre-trusted workspace '{ws_key}' in ~/.claude.json")
+        else:
+            self.logger.debug(f"Workspace '{ws_key}' already trusted")
+            return
+
+        # 4. Write back directly.
+        # Note: atomic rename (tmp → target) is not possible when the file is a
+        # Docker bind-mount from Windows (EXDEV: cross-device rename). Write in-place.
+        try:
+            with claude_json_path.open("w", encoding="utf-8") as fh:
+                json.dump(config, fh, indent=2, ensure_ascii=False)
+        except OSError as exc:
+            self.logger.warning(f"Could not write '{claude_json_path}': {exc}")
+
     def _kill(self, pid: int) -> None:
         """Send SIGTERM to a process, ignoring not-found and permission errors."""
         try:
@@ -112,20 +161,33 @@ class SessionManager(LoggerClass):
                 self.logger.info(f"Session already active for '{project_id}' (PID {project.session.pid})")
                 return
 
-            # 3. Launch subprocess
+            # 3. Validate workspace directory exists
             workspace = pathlib.Path(project.workspace_path)
+            if not workspace.exists():
+                raise RuntimeError(
+                    f"Workspace '{workspace}' does not exist — clone the repository first."
+                )
+
+            # 4. Pre-trust the workspace so the CLI does not block on the trust dialog
+            self._trust_workspace(workspace)
+
+            # 5. Launch subprocess
+            # claude remote-control runs in cwd (no --workspace flag in current CLI).
+            # --name: shown in the claude.ai/code session list.
+            # --permission-mode bypassPermissions: skip interactive trust prompts so
+            #   the process runs unattended inside the container.
             self.logger.info(f"Starting session for '{project_id}' in '{workspace}'")
 
             proc = await asyncio.create_subprocess_exec(
                 "claude", "remote-control",
-                "--workspace", str(workspace),
-                "--claude-dir", str(self._claude_dir),
-                "--continue",
+                "--name", project.name,
+                "--permission-mode", "acceptEdits",
+                cwd=str(workspace),
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.STDOUT,
             )
 
-            # 4. Persist session state
+            # 5. Persist session state
             session = SessionState(
                 pid=proc.pid,
                 workspace=str(workspace),
@@ -137,7 +199,7 @@ class SessionManager(LoggerClass):
             self._processes[project_id] = proc
             self.logger.info(f"Session PID {proc.pid} started for '{project_id}'")
 
-            # 5. Publish event
+            # 6. Publish event
             await self._event_bus.publish(
                 "session.started",
                 {"pid": proc.pid, "workspace": str(workspace), "expires_at": session.expires_at},
