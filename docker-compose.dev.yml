@@ -1,74 +1,23 @@
-# Development overrides for IA-Dev-Hub.
+# Development overrides — use with:
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
 #
-# Usage:
-#   ./start.sh --dev
-#   (or manually: docker compose --env-file services/common/.env \
-#     -f docker-compose.yml -f docker-compose.dev.yml up --build)
-#
-# What this file does:
-#   - Adds a `frontend-dev` service that runs `vite dev` inside a Node container.
-#     The Vite dev server provides true HMR (instant browser updates on save).
-#     It proxies all /api requests to idh-app:8000, including WebSocket upgrades.
-#   - Mounts the Python source directly into idh-app so uvicorn --reload picks up
-#     backend changes without a full image rebuild.
-#   - The frontend is accessed at http://localhost:5173 (Vite dev server).
-#     http://localhost:8000 continues to serve the last built static bundle.
+# Mounts source code into the container and enables uvicorn hot reload.
+# All other service config is inherited from docker-compose.yml.
 
 services:
-
-  # ───────────────────────────────────────────────────────────
-  # Frontend dev server
-  #
-  # Runs Vite in dev mode inside Node 22 — no local Node install required.
-  # - Source code bind-mounted read-write → Vite's HMR watcher picks up saves.
-  # - node_modules stored in a named volume so it persists across restarts.
-  # - Exposes port 5173 on the host for the browser.
-  # - BACKEND_URL tells vite.config.ts to proxy /api to idh-app:8000 (the
-  #   FastAPI service on the idh-net Docker network).
-  # ───────────────────────────────────────────────────────────
-  frontend-dev:
-    image: node:22-bookworm-slim
-    working_dir: /app/frontend
+  dev-center-app:
     volumes:
-      # Source code — HMR watches this directory for changes
-      - ./src/idh-app/frontend:/app/frontend
-      # node_modules lives in a named volume — never touches the host filesystem
-      - frontend-node-modules:/app/frontend/node_modules
-    ports:
-      # Vite dev server — open http://localhost:5173 in the browser
-      - "${IDH_FRONTEND_DEV_PORT:-5173}:5173"
+      # Overlay the Docker build copy with the live source tree for hot reload.
+      - ./src/dev_center_app:/app/dev_center_app
     environment:
-      # Tells vite.config.ts which backend to proxy /api requests to.
-      # Uses the Docker service name — reachable on idh-net.
-      - BACKEND_URL=http://idh-app:8000
-    # Install deps (fast on repeat starts — volume persists node_modules),
-    # then start the Vite dev server bound to all interfaces.
-    command: sh -c "npm install && npx vite --host 0.0.0.0 --port 5173"
-    depends_on:
-      - idh-app
-    networks:
-      - idh-net
-
-  # ───────────────────────────────────────────────────────────
-  # idh-app overrides
-  #
-  # - Python source bind-mounted → uvicorn --reload reflects backend changes
-  #   immediately without rebuilding the image (entrypoint.sh detects DEV_MODE).
-  # - FASTAPI_DEBUG_MODE enables full tracebacks in HTTP 500 responses.
-  # ───────────────────────────────────────────────────────────
-  idh-app:
-    volumes:
-      # Python source mount — uvicorn --reload watches /app/idh-app for .py changes
-      - ./src/idh-app:/app/idh-app
-    environment:
-      # Activates uvicorn --reload inside entrypoint.sh
+      # Enable DEV_MODE early logger in runtime_config.py.
       - DEV_MODE=true
-      # Enable full error tracebacks in API responses (development only)
+      # Include full tracebacks in API error responses.
       - FASTAPI_DEBUG_MODE=true
-      # Verbose logging for development
-      - LOGGING_CONSOLE_LEVEL=DEBUG
-
-# Named volume for frontend node_modules.
-# Managed entirely by Docker — nothing is written to the host.
-volumes:
-  frontend-node-modules:
+    # Override the production CMD with uvicorn hot reload.
+    command: >
+      uvicorn dev_center_app.entrypoint:app
+      --host 0.0.0.0
+      --port 8000
+      --reload
+      --reload-dir /app/dev_center_app

@@ -1,124 +1,65 @@
-# IA-Dev-Hub — Production Docker Compose
+# dev-center — Production Docker Compose
 #
-# First-time setup:
-#   1. Copy services/*/.env.example → services/*/.env and fill in values.
-#   2. Run ./start.sh  (creates data dirs, seeds config, builds and starts everything)
+# Setup:
+#   cp services/dev-center-app/.env.example services/dev-center-app/.env
+#   cp services/vscode/.env.example services/vscode/.env
+#   cp services/common/.env.example services/common/.env
+#   docker compose --env-file services/common/.env up -d --build
 #
-# Subsequent starts:
-#   docker compose --env-file services/common/.env up -d
-#
-# Stop:
-#   docker compose --env-file services/common/.env down
-#
-# The --env-file flag loads services/common/.env for Docker Compose variable
-# interpolation (${IDH_DATA_ROOT}, ${OPENCLAW_GATEWAY_PORT}, …). It is NOT
-# the same as env_file inside a service — those inject variables into containers.
+# The --env-file flag loads services/common/.env for variable interpolation.
 
 services:
-  openclaw-gateway:
-    # OpenClaw AI agent runtime — Telegram bot, session management, IDH plugin host
-    image: ghcr.io/openclaw/openclaw:latest
-    restart: unless-stopped
-    ports:
-      # Gateway API port — Telegram polling + inter-service calls from idh-app
-      - "${OPENCLAW_GATEWAY_PORT:-18789}:18789"
-      # Dashboard port — OpenClaw web UI (reverse-proxied by Zoraxy)
-      - "${OPENCLAW_DASHBOARD_PORT:-18790}:18790"
-    env_file:
-      # OpenClaw-specific secrets (Telegram token, user ID)
-      - services/openclaw/.env
-      # IDH plugin secrets — shares IDH_WEBHOOK_SECRET with the plugin
-      - services/idh-plugin/.env
-    volumes:
-      # OpenClaw configuration, agents, and session data
-      - ${IDH_DATA_ROOT}/config:/home/node/.openclaw
-      # Shared project workspaces (repos cloned by idh-app, read by OpenClaw tools)
-      - ${IDH_DATA_ROOT}/workspaces:/workspaces
-      # Claude Code OAuth credentials — read-only, auth done on host
-      - ~/.claude:/home/node/.claude:ro
-      # Codex OAuth credentials — read-only
-      - ~/.codex:/home/node/.codex:ro
-      # IDH plugin source mounted as the plugin directory (read-only)
-      - ./plugin/idh:/home/node/.openclaw/plugins/idh:ro
-    networks:
-      - idh-net
-    environment:
-      # Bind to LAN so idh-app on idh-net can reach the webhook endpoint
-      - OPENCLAW_GATEWAY_BIND=lan
-      # URL idh-app is reachable at from within the idh-net Docker network.
-      # Plugin reads this to construct all HTTP calls to the sidecar.
-      - IDH_APP_URL=http://idh-app:8000
-
-  idh-app:
-    # IDH sidecar: FastAPI API + React dashboard + bridge manager + watchdog
+  dev-center-app:
+    # FastAPI backend + React dashboard + session manager.
     build:
-      # Build context is the src/ directory (Dockerfile COPY uses relative paths from src/)
       context: src
-      dockerfile: idh-app/Dockerfile
-    image: idh-app:latest
+      dockerfile: dev_center_app/Dockerfile
+    image: dev-center-app:latest
     restart: unless-stopped
     ports:
-      # FastAPI + React dashboard (reverse-proxied by Zoraxy)
-      - "${IDH_APP_PORT:-8000}:8000"
+      # Bind the API + UI port; override DEV_CENTER_PORT in services/common/.env.
+      - "${DEV_CENTER_PORT:-8000}:8000"
     env_file:
-      # IDH-specific config and secrets (webhook secret, logging, FastAPI settings)
-      - services/idh-plugin/.env
+      # App environment variables (logging levels, paths, etc.)
+      - services/dev-center-app/.env
     volumes:
-      # Shared project workspaces — same bind as openclaw-gateway and code-server
-      - ${IDH_DATA_ROOT}/workspaces:/workspaces
-      # IDH state file — idh-app is sole writer (spec Section 1.7)
-      - ${IDH_DATA_ROOT}/state:/data
-      # Coding rules and context templates — read-write (idh-app writes CODING_RULES.md, COMMON_CONTEXT.md)
-      - ${IDH_DATA_ROOT}/rules:/rules
-      # OpenClaw config dir — idh-app is sole writer of openclaw.json
-      - ${IDH_DATA_ROOT}/config:/openclaw-config
-      # Claude Code OAuth for remote-control bridge.
-      # Read-write — claude remote-control refreshes tokens during a session.
+      # Project workspace storage — shared read-write with code-server.
+      - ${DATA_ROOT}/workspaces:/workspaces
+      # Persistent state: projects.json, global-config.json, global-rules.md.
+      - ${DATA_ROOT}/data:/data
+      # Claude CLI credentials — read-write so token refreshes persist to host.
       - ~/.claude:/home/app/.claude
       - ~/.claude.json:/home/app/.claude.json
-      # Codex OAuth for Codex API auto-summary calls.
-      # Read-write — codex may refresh its token during summarisation calls.
-      - ~/.codex:/home/app/.codex
-      # SSH key for git clone/fetch via SSH.
-      # Host path is controlled by SSH_KEY_PATH in services/common/.env (default: ~/.ssh).
+      # SSH key for git clone operations (optional; defaults to ~/.ssh).
       - ${SSH_KEY_PATH:-~/.ssh}:/home/app/.ssh:ro
-    networks:
-      - idh-net
-    depends_on:
-      - openclaw-gateway
     environment:
-      # Container-internal mount paths passed to RUNTIME_CONFIG via env vars.
-      # These are fixed — the host-side path is controlled by IDH_DATA_ROOT above.
+      # Path configuration injected at runtime.
       - DATA_DIR=/data
       - WORKSPACES_DIR=/workspaces
-      - RULES_DIR=/rules
-      - OPENCLAW_CONFIG_DIR=/openclaw-config
+      - CLAUDE_DIR=/home/app/.claude
+    networks:
+      - dev-center-net
 
   code-server:
-    # VS Code in the browser — file browsing and exploration of project workspaces
+    # VS Code in the browser — file browsing for project workspaces.
     image: codercom/code-server:latest
     restart: unless-stopped
     ports:
-      # VS Code web UI (reverse-proxied by Zoraxy)
+      # Bind the VS Code browser port; override CODE_SERVER_PORT in services/common/.env.
       - "${CODE_SERVER_PORT:-8443}:8080"
     env_file:
-      # VS Code settings (optional password — see services/vscode/.env.example)
+      # VS Code server environment (optional password auth).
       - services/vscode/.env
     volumes:
-      # Same workspace volume as openclaw-gateway and idh-app
-      - ${IDH_DATA_ROOT}/workspaces:/workspaces
+      # Same workspace volume as dev-center-app so files are visible in the editor.
+      - ${DATA_ROOT}/workspaces:/workspaces
     networks:
-      - idh-net
-    # Auth is conditional on the PASSWORD env var (set in services/vscode/.env):
-    #   PASSWORD set   → code-server requires that password
-    #   PASSWORD empty → no authentication (useful behind a reverse proxy like Zoraxy)
-    #
-    # entrypoint overrides the image's default (dumb-init + fixuid + code-server)
-    # so /bin/sh runs the conditional. $$ escapes to a literal $ inside the container.
+      - dev-center-net
     entrypoint: ["/bin/sh", "-c"]
+    # Start with password auth if PASSWORD is set; otherwise no auth.
     command: ['if [ -n "$$PASSWORD" ]; then exec code-server --auth password /workspaces; else exec code-server --auth none /workspaces; fi']
 
 networks:
-  idh-net:
-    # Shared bridge network — all services can reach each other by service name
+  dev-center-net:
+    # Bridge network isolates the dev-center services from the host.
     driver: bridge
