@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+﻿import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import RulesTab from './RulesTab';
 
@@ -9,6 +9,9 @@ vi.mock('../../../api/rules', () => ({
   }),
   putRules: vi.fn(),
   syncRules: vi.fn(),
+  listRuleFiles: vi.fn().mockResolvedValue({ files: [] }),
+  uploadRuleFiles: vi.fn(),
+  deleteRuleFile: vi.fn(),
 }));
 
 describe('RulesTab', () => {

@@ -17,11 +17,12 @@ const headerStripStyle: React.CSSProperties = {
   background: theme.colors.surface,
   borderBottom: `1px solid ${theme.colors.border}`,
   padding: '0 24px',
-  height: '48px',
+  height: '52px',
   display: 'flex',
   alignItems: 'center',
   gap: theme.spacing.md,
   flexShrink: 0,
+  backdropFilter: 'blur(8px)',
 };
 
 const tabBarStyle: React.CSSProperties = {
@@ -31,15 +32,16 @@ const tabBarStyle: React.CSSProperties = {
   height: '40px',
   alignItems: 'flex-end',
   flexShrink: 0,
+  background: theme.colors.surface,
 };
 
 function tabStyle(isActive: boolean): React.CSSProperties {
   return {
     display: 'inline-flex', alignItems: 'center',
-    padding: '0 12px', height: '40px',
-    fontSize: theme.fontSize.xs, fontWeight: theme.fontWeight.medium,
-    fontFamily: theme.font.sans, textDecoration: 'none',
-    letterSpacing: '0.06em', cursor: 'pointer',
+    padding: '0 14px', height: '40px',
+    fontSize: theme.fontSize.xs, fontWeight: theme.fontWeight.bold,
+    fontFamily: theme.font.display, textDecoration: 'none',
+    letterSpacing: '0.08em', cursor: 'pointer',
     background: 'none', border: 'none',
     borderBottom: isActive ? `2px solid ${theme.colors.accent}` : '2px solid transparent',
     marginBottom: '-1px',
@@ -87,11 +89,14 @@ export default function ProjectPage() {
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       {/* Header strip */}
       <div style={headerStripStyle}>
-        <Link to="/" style={{ color: theme.colors.textSecondary, fontSize: theme.fontSize.xs, fontFamily: theme.font.sans, textDecoration: 'none', flexShrink: 0 }}>
+        <Link to="/" style={{ color: theme.colors.textSecondary, fontSize: theme.fontSize.xs, fontFamily: theme.font.sans, textDecoration: 'none', flexShrink: 0, transition: 'color 0.15s' }}
+          onMouseEnter={e => (e.currentTarget.style.color = theme.colors.accent)}
+          onMouseLeave={e => (e.currentTarget.style.color = theme.colors.textSecondary)}
+        >
           ← Projects
         </Link>
         <span style={{ color: theme.colors.borderStrong, fontSize: theme.fontSize.sm }}>/</span>
-        <span style={{ fontSize: theme.fontSize.sm, fontWeight: theme.fontWeight.semibold, fontFamily: theme.font.sans, color: theme.colors.text, flexShrink: 0 }}>
+        <span style={{ fontSize: theme.fontSize.sm, fontWeight: theme.fontWeight.bold, fontFamily: theme.font.display, color: theme.colors.text, flexShrink: 0, letterSpacing: '0.02em' }}>
           {project.name}
         </span>
         <StatusBadge status={status} />
@@ -102,18 +107,18 @@ export default function ProjectPage() {
             <button
               onClick={() => act(() => startSession(project.id))}
               disabled={actionBusy}
-              style={{ padding: '5px 12px', borderRadius: theme.radius.sm, fontSize: theme.fontSize.xs, fontFamily: theme.font.sans, fontWeight: theme.fontWeight.medium, cursor: 'pointer', background: theme.colors.active, color: theme.colors.bg, border: 'none', opacity: actionBusy ? 0.6 : 1 }}
+              style={{ padding: '5px 14px', borderRadius: theme.radius.md, fontSize: theme.fontSize.xs, fontFamily: theme.font.sans, fontWeight: theme.fontWeight.semibold, cursor: actionBusy ? 'not-allowed' : 'pointer', background: `${theme.colors.active}18`, color: theme.colors.active, border: `1px solid ${theme.colors.active}60`, opacity: actionBusy ? 0.6 : 1, letterSpacing: '0.04em', transition: 'opacity 0.15s' }}
             >
-              Start
+              {actionBusy ? '…' : 'Start'}
             </button>
           )}
           {project.session && (
             <button
               onClick={() => act(() => stopSession(project.id))}
               disabled={actionBusy}
-              style={{ padding: '5px 12px', borderRadius: theme.radius.sm, fontSize: theme.fontSize.xs, fontFamily: theme.font.sans, fontWeight: theme.fontWeight.medium, cursor: 'pointer', background: 'none', color: theme.colors.danger, border: `1px solid ${theme.colors.danger}55`, opacity: actionBusy ? 0.6 : 1 }}
+              style={{ padding: '5px 14px', borderRadius: theme.radius.md, fontSize: theme.fontSize.xs, fontFamily: theme.font.sans, fontWeight: theme.fontWeight.semibold, cursor: actionBusy ? 'not-allowed' : 'pointer', background: `${theme.colors.danger}12`, color: theme.colors.danger, border: `1px solid ${theme.colors.danger}55`, opacity: actionBusy ? 0.6 : 1, letterSpacing: '0.04em', transition: 'opacity 0.15s' }}
             >
-              Stop
+              {actionBusy ? '…' : 'Stop'}
             </button>
           )}
         </div>

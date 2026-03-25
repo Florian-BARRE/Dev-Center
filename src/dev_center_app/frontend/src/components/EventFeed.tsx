@@ -1,5 +1,5 @@
-// ====== Code Summary ======
-// Real-time monitoring events feed, connected to WS /api/v1/monitoring/events.
+﻿// ====== Code Summary ======
+// Real-time monitoring events feed, connected to WS /api/monitoring/events.
 // Reconnects with exponential backoff.
 
 import { useEffect, useRef, useState } from 'react';
@@ -8,7 +8,7 @@ import { wsUrl } from '../api/client';
 import type { MonitoringEvent } from '../api/types';
 
 const MAX_EVENTS = 200;
-const WS_PATH = '/api/v1/monitoring/events';
+const WS_PATH = '/api/monitoring/events';
 
 function eventColor(type: string): string {
   if (type.startsWith('session.start'))  return theme.colors.active;
@@ -96,7 +96,7 @@ export default function EventFeed() {
             display: 'inline-block',
           }} />
           <span style={{ fontSize: theme.fontSize.xs, fontFamily: theme.font.mono, color: theme.colors.muted }}>
-            {connected ? 'connected' : 'reconnecting…'}
+            {connected ? 'connected' : 'reconnectingâ€¦'}
           </span>
         </div>
         <button
@@ -116,7 +116,7 @@ export default function EventFeed() {
       <div style={{ maxHeight: '360px', overflowY: 'auto', fontFamily: theme.font.mono, fontSize: theme.fontSize.xs }}>
         {rows.length === 0 ? (
           <div style={{ padding: '24px 16px', color: theme.colors.muted, fontFamily: theme.font.sans, fontSize: theme.fontSize.sm, fontStyle: 'italic' }}>
-            Waiting for events…
+            Waiting for eventsâ€¦
           </div>
         ) : rows.map((row, i) => (
           <div key={i} style={{
@@ -138,3 +138,4 @@ export default function EventFeed() {
     </div>
   );
 }
+

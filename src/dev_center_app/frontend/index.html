@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
@@ -7,13 +7,66 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap"
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@500;600;700&display=swap"
       rel="stylesheet"
     />
     <style>
       *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-      body { background: #0a0a0a; color: #fafafa; }
-      @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+      :root {
+        --accent:  #59e1c6;
+        --active:  #4fd271;
+        --bg:      #071419;
+        --surface: #0f2128;
+        --border:  #1d4350;
+        --text:    #e7f7f4;
+      }
+
+      html { font-size: 13px; }
+
+      body {
+        background-color: var(--bg);
+        color: var(--text);
+        font-family: 'IBM Plex Mono', monospace;
+        min-height: 100vh;
+        background-image:
+          radial-gradient(circle at 8% 0%, rgba(89, 225, 198, 0.22), transparent 36%),
+          radial-gradient(circle at 88% 18%, rgba(105, 193, 255, 0.18), transparent 34%),
+          linear-gradient(rgba(89, 225, 198, 0.06) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(89, 225, 198, 0.06) 1px, transparent 1px),
+          linear-gradient(180deg, #071419 0%, #091a20 58%, #071419 100%);
+        background-size: auto, auto, 52px 52px, 52px 52px, auto;
+        background-attachment: fixed;
+      }
+
+      ::-webkit-scrollbar { width: 4px; height: 4px; }
+      ::-webkit-scrollbar-track { background: var(--bg); }
+      ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+      ::-webkit-scrollbar-thumb:hover { background: #2f6472; }
+
+      a { color: inherit; text-decoration: none; }
+      button { cursor: pointer; }
+
+      @keyframes pulse-dot {
+        0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(79, 210, 113, 0.6); }
+        50% { opacity: 0.7; box-shadow: 0 0 0 6px rgba(79, 210, 113, 0); }
+      }
+
+      @keyframes ping-success {
+        0% { transform: scale(1); opacity: 0.8; }
+        45% { transform: scale(1.7); opacity: 1; }
+        100% { transform: scale(1); opacity: 0.85; }
+      }
+
+      @keyframes fadeUp {
+        from { opacity: 0; transform: translateY(6px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+
+      @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.45; }
+      }
     </style>
   </head>
   <body>

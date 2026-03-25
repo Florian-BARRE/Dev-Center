@@ -6,12 +6,17 @@ import App from './App';
 vi.mock('./api/auth', () => ({
   getAuthStatus: vi.fn().mockResolvedValue({ authenticated: true, email: null }),
 }));
+vi.mock('./api/health', () => ({
+  getHealth: vi.fn().mockResolvedValue({
+    status: 'ok',
+    serverTime: '2026-03-25T12:00:00+01:00',
+    timezone: 'CET',
+    utcOffset: '+0100',
+  }),
+}));
 vi.mock('./pages/Dashboard/Dashboard', () => ({
   default: ({ showNewProject }: { showNewProject?: boolean }) =>
     <div data-testid="dashboard">{showNewProject ? 'new-project' : 'dashboard'}</div>,
-}));
-vi.mock('./pages/Monitoring/MonitoringPage', () => ({
-  default: () => <div data-testid="monitoring" />,
 }));
 vi.mock('./pages/Settings/SettingsPage', () => ({
   default: () => <div data-testid="settings" />,

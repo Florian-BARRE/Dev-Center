@@ -1,6 +1,6 @@
-// Mirrors backend Pydantic models (_CamelModel with alias_generator=to_camel)
+﻿// Mirrors backend Pydantic models (_CamelModel with alias_generator=to_camel)
 
-// ── Session ────────────────────────────────────────────────────────────────
+// â”€â”€ Session â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export interface SessionState {
   pid: number;
@@ -11,20 +11,20 @@ export interface SessionState {
   claudeProjectHash: string;
 }
 
-// ── Schedule ───────────────────────────────────────────────────────────────
+// â”€â”€ Schedule â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export interface TimeRange {
   start: string;           // "HH:MM"
-  end: string;             // "HH:MM" — "00:00" = midnight
+  end: string;             // "HH:MM" â€” "00:00" = midnight
 }
 
 export interface ScheduleConfig {
   enabled: boolean;
   ranges: TimeRange[];
-  days: string[];          // ["mon","tue",...] — empty = all days
+  days: string[];          // ["mon","tue",...] â€” empty = all days
 }
 
-// ── Project ────────────────────────────────────────────────────────────────
+// â”€â”€ Project â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export type ProjectStatus = 'cloning' | 'ready' | 'active';
 
@@ -57,14 +57,14 @@ export interface UpdateProjectRequest {
   autoRenew?: boolean;
 }
 
-// ── Session responses ──────────────────────────────────────────────────────
+// â”€â”€ Session responses â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export interface SessionResponse {
   projectId: string;
   session: SessionState;
 }
 
-// ── Memory ─────────────────────────────────────────────────────────────────
+// â”€â”€ Memory â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export interface MemoryFile {
   name: string;
@@ -77,21 +77,37 @@ export interface MemoryResponse {
   hashDiscovered: boolean;
 }
 
-// ── Rules ──────────────────────────────────────────────────────────────────
+// â”€â”€ Rules â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export interface RulesResponse {
   content: string;
   globalRulesOutOfSync: boolean;
 }
 
-// ── Auth ───────────────────────────────────────────────────────────────────
+export interface RulesFile {
+  filename: string;
+  size: number;
+}
+
+export interface RulesFilesResponse {
+  files: RulesFile[];
+}
+
+// â”€â”€ Auth â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export interface AuthStatusResponse {
   authenticated: boolean;
   email: string | null;
 }
 
-// ── Monitoring ─────────────────────────────────────────────────────────────
+export interface HealthResponse {
+  status: string;
+  serverTime: string;
+  timezone: string;
+  utcOffset: string;
+}
+
+// â”€â”€ Monitoring â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export interface ProjectMonitorRow {
   id: string;
@@ -112,7 +128,7 @@ export interface MonitoringEvent {
   data: Record<string, unknown>;
 }
 
-// ── Settings ───────────────────────────────────────────────────────────────
+// â”€â”€ Settings â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export interface GlobalDefaults {
   defaultProvider: string;
@@ -126,10 +142,11 @@ export interface GlobalConfigResponse {
   schedule: ScheduleConfig;
 }
 
-// ── Model options ──────────────────────────────────────────────────────────
+// â”€â”€ Model options â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export const MODEL_OPTIONS: { provider: string; model: string; label: string }[] = [
   { provider: 'anthropic', model: 'claude-opus-4-6',   label: 'Claude Opus 4.6' },
   { provider: 'anthropic', model: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6' },
   { provider: 'anthropic', model: 'claude-haiku-4-5',  label: 'Claude Haiku 4.5' },
 ];
+

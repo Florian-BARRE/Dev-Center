@@ -26,12 +26,16 @@ export default function ModelSelector({ provider, model, onChange, disabled }: M
         color: theme.colors.text,
         border: `1px solid ${theme.colors.border}`,
         borderRadius: theme.radius.md,
-        padding: '6px 10px',
+        padding: '7px 10px',
         fontSize: theme.fontSize.sm,
         fontFamily: theme.font.mono,
         cursor: disabled ? 'not-allowed' : 'pointer',
         outline: 'none',
+        opacity: disabled ? 0.5 : 1,
+        transition: 'border-color 0.15s',
       }}
+      onFocus={e => { e.currentTarget.style.borderColor = theme.colors.accent; }}
+      onBlur={e  => { e.currentTarget.style.borderColor = theme.colors.border; }}
     >
       {MODEL_OPTIONS.map((opt) => (
         <option key={`${opt.provider}|${opt.model}`} value={`${opt.provider}|${opt.model}`}>

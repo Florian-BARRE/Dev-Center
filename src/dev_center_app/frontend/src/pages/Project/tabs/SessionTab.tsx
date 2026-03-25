@@ -1,5 +1,5 @@
-// ====== Code Summary ======
-// Session tab — status info, start/stop/renew, auto-renew toggle, live logs.
+﻿// ====== Code Summary ======
+// Session tab â€” status info, start/stop/renew, auto-renew toggle, live logs.
 
 import React, { useState } from 'react';
 import theme from '../../../theme';
@@ -19,17 +19,18 @@ interface SessionTabProps {
 const cardStyle: React.CSSProperties = {
   background: theme.colors.surface,
   border: `1px solid ${theme.colors.border}`,
-  borderRadius: theme.radius.md,
+  borderRadius: theme.radius.lg,
   padding: theme.spacing.lg,
   marginBottom: theme.spacing.md,
 };
 
 const labelStyle: React.CSSProperties = {
-  fontFamily: theme.font.sans,
+  fontFamily: theme.font.display,
   fontSize: theme.fontSize.xs,
   color: theme.colors.muted,
   textTransform: 'uppercase',
-  letterSpacing: '0.08em',
+  letterSpacing: '0.10em',
+  fontWeight: 700,
   marginBottom: '4px',
 };
 
@@ -64,16 +65,18 @@ export default function SessionTab({ project, onRefresh }: SessionTabProps) {
   };
 
   const btnBase: React.CSSProperties = {
-    padding: '6px 14px',
-    borderRadius: theme.radius.sm,
-    fontSize: theme.fontSize.sm,
+    padding: '6px 16px',
+    borderRadius: theme.radius.md,
+    fontSize: theme.fontSize.xs,
     fontFamily: theme.font.sans,
-    fontWeight: theme.fontWeight.medium,
+    fontWeight: theme.fontWeight.semibold,
     cursor: busy ? 'not-allowed' : 'pointer',
     opacity: busy ? 0.6 : 1,
-    border: `1px solid ${theme.colors.borderStrong}`,
+    border: `1px solid ${theme.colors.border}`,
     background: 'none',
-    color: theme.colors.text,
+    color: theme.colors.textSecondary,
+    letterSpacing: '0.04em',
+    transition: 'opacity 0.15s',
   };
 
   return (
@@ -128,7 +131,7 @@ export default function SessionTab({ project, onRefresh }: SessionTabProps) {
             <button
               onClick={() => act(() => startSession(project.id))}
               disabled={busy}
-              style={{ ...btnBase, background: theme.colors.active, color: theme.colors.bg, border: 'none' }}
+              style={{ ...btnBase, background: `${theme.colors.active}18`, color: theme.colors.active, border: `1px solid ${theme.colors.active}60` }}
             >
               Start
             </button>
@@ -138,7 +141,7 @@ export default function SessionTab({ project, onRefresh }: SessionTabProps) {
               <button
                 onClick={() => act(() => stopSession(project.id))}
                 disabled={busy}
-                style={{ ...btnBase, color: theme.colors.danger, borderColor: theme.colors.danger + '55' }}
+                style={{ ...btnBase, background: `${theme.colors.danger}12`, color: theme.colors.danger, borderColor: theme.colors.danger + '55' }}
               >
                 Stop
               </button>
@@ -157,7 +160,7 @@ export default function SessionTab({ project, onRefresh }: SessionTabProps) {
 
       {/* Live logs */}
       {session && (
-        <LogPane wsPath={`/api/v1/projects/${project.id}/session/logs`} />
+        <LogPane wsPath={`/api/projects/${project.id}/session/logs`} />
       )}
 
       {/* Model + Schedule */}
@@ -182,3 +185,4 @@ export default function SessionTab({ project, onRefresh }: SessionTabProps) {
     </div>
   );
 }
+

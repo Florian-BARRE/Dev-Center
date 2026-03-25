@@ -83,6 +83,11 @@ class GitManager(LoggerClass):
             str: Output lines from git clone.
         """
         dest = self.workspace_path(project_id)
+        # If a stale workspace directory exists from a previous failed or
+        # interrupted clone, remove it before starting fresh.
+        if dest.exists():
+            self.logger.warning(f"Stale workspace found at '{dest}', removing before clone")
+            shutil.rmtree(dest, ignore_errors=True)
         self.logger.info(f"Cloning '{repo_url}' → '{dest}'")
 
         proc = await asyncio.create_subprocess_exec(

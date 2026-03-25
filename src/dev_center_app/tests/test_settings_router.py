@@ -1,4 +1,4 @@
-# tests/test_settings_router.py
+﻿# tests/test_settings_router.py
 import pytest
 from httpx import AsyncClient, ASGITransport
 from tests.conftest import setup_context
@@ -16,14 +16,14 @@ async def client(tmp_data, tmp_path):
 
 @pytest.mark.asyncio
 async def test_get_settings_defaults(client):
-    resp = await client.get("/api/v1/settings")
+    resp = await client.get("/api/settings")
     assert resp.status_code == 200
     assert resp.json()["defaults"]["defaultModel"] == "claude-sonnet-4-6"
 
 
 @pytest.mark.asyncio
 async def test_update_settings(client):
-    resp = await client.put("/api/v1/settings", json={
+    resp = await client.put("/api/settings", json={
         "defaults": {"defaultModel": "claude-opus-4-6", "defaultProvider": "anthropic",
                      "defaultTtlHours": 12, "renewThresholdMinutes": 20}
     })
@@ -33,8 +33,8 @@ async def test_update_settings(client):
 
 @pytest.mark.asyncio
 async def test_global_rules_roundtrip(client):
-    await client.put("/api/v1/settings/rules", json={"content": "# My global rules\n"})
-    resp = await client.get("/api/v1/settings/rules")
+    await client.put("/api/settings/rules", json={"content": "# My global rules\n"})
+    resp = await client.get("/api/settings/rules")
     assert "My global rules" in resp.json()["content"]
 
 
@@ -53,7 +53,8 @@ async def test_out_of_sync_count(tmp_data, tmp_path):
     CONTEXT.state_manager.save_global_rules("- Always use uv\n")
     app = create_app(app_name="test", debug=True)
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-        resp = await ac.get("/api/v1/settings/rules")
+        resp = await ac.get("/api/settings/rules")
     assert resp.status_code == 200
-    # CLAUDE.md has no global block → staleproj is out of sync
+    # CLAUDE.md has no global block â†’ staleproj is out of sync
     assert resp.json()["outOfSyncProjects"] == 1
+

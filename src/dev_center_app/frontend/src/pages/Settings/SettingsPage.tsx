@@ -1,33 +1,29 @@
-// ====== Code Summary ======
-// Settings page — 3 tabs: Defaults, Global Rules, Auth.
+﻿// ====== Code Summary ======
+// Settings page in a single-flow layout: defaults, global rules, and auth in one screen.
 
 import React, { useEffect, useRef, useState } from 'react';
-import theme from '../../theme';
-import ModelSelector from '../../components/ModelSelector';
-import ScheduleEditor from '../../components/ScheduleEditor';
-import { getSettings, putSettings, getGlobalRules, putGlobalRules } from '../../api/settings';
+import { wsUrl } from '../../api/client';
 import { getAuthStatus, postLogin } from '../../api/auth';
 import { listProjects } from '../../api/projects';
 import { getRules } from '../../api/rules';
-import { wsUrl } from '../../api/client';
-import type { GlobalConfigResponse, ScheduleConfig, AuthStatusResponse } from '../../api/types';
-
-type ActiveTab = 'defaults' | 'rules' | 'auth';
-
-// ── Shared styles ──────────────────────────────────────────────────────────
+import { getGlobalRules, getSettings, putGlobalRules, putSettings } from '../../api/settings';
+import type { AuthStatusResponse, GlobalConfigResponse, ScheduleConfig } from '../../api/types';
+import ModelSelector from '../../components/ModelSelector';
+import ScheduleEditor from '../../components/ScheduleEditor';
+import theme from '../../theme';
 
 const cardStyle: React.CSSProperties = {
   background: theme.colors.surface,
   border: `1px solid ${theme.colors.border}`,
-  borderRadius: theme.radius.md,
-  padding: theme.spacing.lg,
-  marginBottom: theme.spacing.md,
+  borderRadius: theme.radius.lg,
+  padding: '14px',
 };
 
 const labelStyle: React.CSSProperties = {
   display: 'block',
-  fontFamily: theme.font.sans,
+  fontFamily: theme.font.display,
   fontSize: theme.fontSize.xs,
+  fontWeight: theme.fontWeight.bold,
   color: theme.colors.textSecondary,
   textTransform: 'uppercase',
   letterSpacing: '0.08em',
@@ -37,39 +33,64 @@ const labelStyle: React.CSSProperties = {
 const inputStyle: React.CSSProperties = {
   background: theme.colors.bg,
   border: `1px solid ${theme.colors.border}`,
-  borderRadius: theme.radius.sm,
+  borderRadius: theme.radius.md,
   color: theme.colors.text,
   fontFamily: theme.font.mono,
   fontSize: theme.fontSize.sm,
-  padding: '6px 10px',
+  padding: '7px 10px',
   width: '120px',
   outline: 'none',
 };
 
-const saveBtn = (busy: boolean): React.CSSProperties => ({
-  background: theme.colors.accent,
-  color: theme.colors.bg,
-  border: 'none',
-  borderRadius: theme.radius.sm,
-  padding: '6px 16px',
-  fontSize: theme.fontSize.sm,
-  fontFamily: theme.font.sans,
-  fontWeight: theme.fontWeight.medium,
-  cursor: busy ? 'not-allowed' : 'pointer',
-  opacity: busy ? 0.6 : 1,
-});
+function SectionBlock({
+  id,
+  title,
+  description,
+  children,
+}: {
+  id: string;
+  title: string;
+  description: string;
+  children: React.ReactNode;
+}): JSX.Element {
+  return (
+    <section id={id} style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+      <header>
+        <h2 style={{
+          margin: 0,
+          fontFamily: theme.font.display,
+          fontSize: theme.fontSize.lg,
+          color: theme.colors.text,
+          letterSpacing: '0.02em',
+        }}>
+          {title}
+        </h2>
+        <p style={{
+          margin: '4px 0 0',
+          color: theme.colors.textSecondary,
+          fontFamily: theme.font.sans,
+          fontSize: theme.fontSize.sm,
+        }}>
+          {description}
+        </p>
+      </header>
+      {children}
+    </section>
+  );
+}
 
-// ── Defaults tab ───────────────────────────────────────────────────────────
-
-function DefaultsTab() {
+function DefaultsSection(): JSX.Element {
   const [config, setConfig] = useState<GlobalConfigResponse | null>(null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
-  useEffect(() => { getSettings().then(setConfig).catch(() => {}); }, []);
+  useEffect(() => {
+    getSettings().then(setConfig).catch(() => {});
+  }, []);
 
-  const save = async () => {
+  const save = async (): Promise<void> => {
     if (!config || saving) return;
+
     setSaving(true);
     setSaved(false);
     try {
@@ -77,24 +98,35 @@ function DefaultsTab() {
       setConfig(updated);
       setSaved(true);
       setTimeout(() => setSaved(false), 2_000);
-    } finally { setSaving(false); }
+    } finally {
+      setSaving(false);
+    }
   };
 
-  if (!config) return <div style={{ color: theme.colors.muted, fontFamily: theme.font.sans, fontSize: theme.fontSize.sm }}>Loading…</div>;
+  if (!config) {
+    return (
+      <div style={{ ...cardStyle, color: theme.colors.muted, fontFamily: theme.font.sans, fontSize: theme.fontSize.sm }}>
+        Loading defaults...
+      </div>
+    );
+  }
 
-  const updateSchedule = (schedule: ScheduleConfig) => setConfig({ ...config, schedule });
+  const updateSchedule = (schedule: ScheduleConfig): void => setConfig({ ...config, schedule });
 
   return (
-    <div>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
       <div style={cardStyle}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: theme.spacing.md }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px' }}>
           <div>
             <label style={labelStyle}>Default Model</label>
             <ModelSelector
               provider={config.defaults.defaultProvider}
               model={config.defaults.defaultModel}
               onChange={(provider, model) =>
-                setConfig({ ...config, defaults: { ...config.defaults, defaultProvider: provider, defaultModel: model } })
+                setConfig({
+                  ...config,
+                  defaults: { ...config.defaults, defaultProvider: provider, defaultModel: model },
+                })
               }
             />
           </div>
@@ -105,8 +137,14 @@ function DefaultsTab() {
               min={1}
               max={48}
               value={config.defaults.defaultTtlHours}
-              onChange={(e) =>
-                setConfig({ ...config, defaults: { ...config.defaults, defaultTtlHours: parseInt(e.target.value) || 8 } })
+              onChange={(event) =>
+                setConfig({
+                  ...config,
+                  defaults: {
+                    ...config.defaults,
+                    defaultTtlHours: parseInt(event.target.value, 10) || 8,
+                  },
+                })
               }
               style={inputStyle}
             />
@@ -118,8 +156,14 @@ function DefaultsTab() {
               min={5}
               max={120}
               value={config.defaults.renewThresholdMinutes}
-              onChange={(e) =>
-                setConfig({ ...config, defaults: { ...config.defaults, renewThresholdMinutes: parseInt(e.target.value) || 30 } })
+              onChange={(event) =>
+                setConfig({
+                  ...config,
+                  defaults: {
+                    ...config.defaults,
+                    renewThresholdMinutes: parseInt(event.target.value, 10) || 30,
+                  },
+                })
               }
               style={inputStyle}
             />
@@ -128,44 +172,65 @@ function DefaultsTab() {
       </div>
 
       <div style={cardStyle}>
-        <div style={{ ...labelStyle, marginBottom: theme.spacing.md }}>Global Schedule</div>
+        <div style={{ ...labelStyle, marginBottom: '10px' }}>Global Schedule</div>
         <ScheduleEditor value={config.schedule} onChange={updateSchedule} />
       </div>
 
-      <div style={{ display: 'flex', gap: theme.spacing.sm, alignItems: 'center' }}>
-        <button onClick={save} disabled={saving} style={saveBtn(saving)}>
-          {saving ? 'Saving…' : 'Save'}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <button
+          onClick={() => void save()}
+          disabled={saving}
+          style={{
+            border: 'none',
+            borderRadius: theme.radius.md,
+            background: theme.colors.accent,
+            color: theme.colors.bg,
+            padding: '7px 12px',
+            fontFamily: theme.font.display,
+            fontSize: '11px',
+            fontWeight: theme.fontWeight.bold,
+            letterSpacing: '0.08em',
+            textTransform: 'uppercase',
+            opacity: saving ? 0.5 : 1,
+            cursor: saving ? 'not-allowed' : 'pointer',
+          }}
+        >
+          {saving ? 'Saving...' : 'Save Defaults'}
         </button>
-        {saved && <span style={{ color: theme.colors.active, fontSize: theme.fontSize.sm, fontFamily: theme.font.sans }}>Saved ✓</span>}
+        {saved && (
+          <span style={{ color: theme.colors.active, fontFamily: theme.font.sans, fontSize: theme.fontSize.sm }}>
+            Saved
+          </span>
+        )}
       </div>
     </div>
   );
 }
 
-// ── Global Rules tab ───────────────────────────────────────────────────────
-
-function GlobalRulesTab() {
+function GlobalRulesSection(): JSX.Element {
   const [content, setContent] = useState('');
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
-  // Count of projects whose CLAUDE.md global-rules block is out of sync
   const [outOfSyncCount, setOutOfSyncCount] = useState(0);
 
   useEffect(() => {
     getGlobalRules().then(setContent).catch(() => {});
-    // Count how many projects have out-of-sync global rules
+
     listProjects().then(async (projects) => {
       const syncFlags = await Promise.all(
-        projects.map((p) =>
-          getRules(p.id).then((r) => r.globalRulesOutOfSync).catch(() => false)
+        projects.map((project) =>
+          getRules(project.id)
+            .then((response) => response.globalRulesOutOfSync)
+            .catch(() => false)
         )
       );
       setOutOfSyncCount(syncFlags.filter(Boolean).length);
     }).catch(() => {});
   }, []);
 
-  const save = async () => {
+  const save = async (): Promise<void> => {
     if (saving) return;
+
     setSaving(true);
     setSaved(false);
     try {
@@ -173,62 +238,88 @@ function GlobalRulesTab() {
       setContent(updated);
       setSaved(true);
       setTimeout(() => setSaved(false), 2_000);
-    } finally { setSaving(false); }
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
-    <div>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
       <div style={cardStyle}>
-        <div style={{ marginBottom: theme.spacing.sm, display: 'flex', alignItems: 'center', gap: theme.spacing.sm }}>
-          <span style={{ fontFamily: theme.font.sans, fontSize: theme.fontSize.xs, color: theme.colors.muted }}>
-            These rules are injected at the top of every project's CLAUDE.md.
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px', flexWrap: 'wrap' }}>
+          <span style={{ fontFamily: theme.font.sans, fontSize: theme.fontSize.sm, color: theme.colors.muted }}>
+            This block is injected at the top of every project CLAUDE.md.
           </span>
           {outOfSyncCount > 0 && (
             <span style={{
-              background: theme.colors.warning,
-              color: theme.colors.bg,
-              fontFamily: theme.font.sans,
-              fontSize: theme.fontSize.xs,
-              fontWeight: theme.fontWeight.semibold,
-              padding: '2px 7px',
-              borderRadius: '999px',
+              background: `${theme.colors.warning}33`,
+              border: `1px solid ${theme.colors.warning}66`,
+              borderRadius: theme.radius.full,
+              color: theme.colors.warning,
+              fontFamily: theme.font.display,
+              fontSize: '10px',
+              fontWeight: theme.fontWeight.bold,
+              letterSpacing: '0.06em',
+              textTransform: 'uppercase',
+              padding: '2px 8px',
             }}>
               {outOfSyncCount} out of sync
             </span>
           )}
         </div>
+
         <textarea
           value={content}
-          onChange={(e) => setContent(e.target.value)}
+          onChange={(event) => setContent(event.target.value)}
           style={{
             width: '100%',
             minHeight: '300px',
             background: theme.colors.bg,
             border: `1px solid ${theme.colors.border}`,
-            borderRadius: theme.radius.sm,
+            borderRadius: theme.radius.md,
             color: theme.colors.text,
             fontFamily: theme.font.mono,
             fontSize: theme.fontSize.sm,
-            padding: theme.spacing.md,
+            padding: '10px',
             resize: 'vertical',
             boxSizing: 'border-box',
             outline: 'none',
           }}
         />
       </div>
-      <div style={{ display: 'flex', gap: theme.spacing.sm, alignItems: 'center' }}>
-        <button onClick={save} disabled={saving} style={saveBtn(saving)}>
-          {saving ? 'Saving…' : 'Save'}
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <button
+          onClick={() => void save()}
+          disabled={saving}
+          style={{
+            border: 'none',
+            borderRadius: theme.radius.md,
+            background: theme.colors.accent,
+            color: theme.colors.bg,
+            padding: '7px 12px',
+            fontFamily: theme.font.display,
+            fontSize: '11px',
+            fontWeight: theme.fontWeight.bold,
+            letterSpacing: '0.08em',
+            textTransform: 'uppercase',
+            opacity: saving ? 0.5 : 1,
+            cursor: saving ? 'not-allowed' : 'pointer',
+          }}
+        >
+          {saving ? 'Saving...' : 'Save Global Rules'}
         </button>
-        {saved && <span style={{ color: theme.colors.active, fontSize: theme.fontSize.sm, fontFamily: theme.font.sans }}>Saved ✓</span>}
+        {saved && (
+          <span style={{ color: theme.colors.active, fontFamily: theme.font.sans, fontSize: theme.fontSize.sm }}>
+            Saved
+          </span>
+        )}
       </div>
     </div>
   );
 }
 
-// ── Auth tab ───────────────────────────────────────────────────────────────
-
-function AuthTab() {
+function AuthSection(): JSX.Element {
   const [status, setStatus] = useState<AuthStatusResponse | null>(null);
   const [showStream, setShowStream] = useState(false);
   const [streamLines, setStreamLines] = useState<string[]>([]);
@@ -239,20 +330,28 @@ function AuthTab() {
     getAuthStatus().then(setStatus).catch(() => {});
   }, []);
 
-  const startLogin = async () => {
+  const startLogin = async (): Promise<void> => {
     try {
       await postLogin();
-      setStreamLines([]);
-      setStreamDone(false);
       setShowStream(true);
-      const ws = new WebSocket(wsUrl('/api/v1/auth/login/stream'));
+      setStreamDone(false);
+      setStreamLines([]);
+
+      const ws = new WebSocket(wsUrl('/api/auth/login/stream'));
       wsRef.current = ws;
-      ws.onmessage = (e) => {
+
+      ws.onmessage = (event) => {
         try {
-          const msg = JSON.parse(e.data as string) as { line?: string; done?: boolean; success?: boolean };
+          const msg = JSON.parse(event.data as string) as {
+            line?: string;
+            done?: boolean;
+            success?: boolean;
+          };
+
           if (msg.line !== undefined) {
             setStreamLines((prev) => [...prev, msg.line!]);
           }
+
           if (msg.done) {
             setStreamDone(true);
             ws.close();
@@ -260,49 +359,65 @@ function AuthTab() {
               getAuthStatus().then(setStatus).catch(() => {});
             }
           }
-        } catch { /* ignore */ }
+        } catch {
+          // Ignore malformed lines.
+        }
       };
-      ws.onerror = () => { setStreamDone(true); ws.close(); };
-    } catch { /* ignore */ }
+
+      ws.onerror = () => {
+        setStreamDone(true);
+        ws.close();
+      };
+    } catch {
+      // Ignore action errors.
+    }
   };
 
-  useEffect(() => () => { wsRef.current?.close(); }, []);
+  useEffect(() => {
+    return () => wsRef.current?.close();
+  }, []);
 
   return (
-    <div>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
       <div style={cardStyle}>
         {status ? (
-          <div style={{ display: 'flex', alignItems: 'center', gap: theme.spacing.md }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
             <span style={{
-              fontFamily: theme.font.sans,
-              fontSize: theme.fontSize.md,
               color: status.authenticated ? theme.colors.active : theme.colors.danger,
+              fontFamily: theme.font.display,
+              fontSize: theme.fontSize.base,
+              fontWeight: theme.fontWeight.bold,
+              letterSpacing: '0.04em',
             }}>
-              {status.authenticated ? '✅ Authenticated' : '❌ Not authenticated'}
+              {status.authenticated ? 'Authenticated' : 'Not Authenticated'}
             </span>
             {status.email && (
-              <span style={{ fontFamily: theme.font.mono, fontSize: theme.fontSize.sm, color: theme.colors.muted }}>
+              <span style={{ color: theme.colors.muted, fontFamily: theme.font.mono, fontSize: theme.fontSize.sm }}>
                 {status.email}
               </span>
             )}
           </div>
         ) : (
-          <div style={{ color: theme.colors.muted, fontFamily: theme.font.sans, fontSize: theme.fontSize.sm }}>Loading…</div>
+          <div style={{ color: theme.colors.muted, fontFamily: theme.font.sans, fontSize: theme.fontSize.sm }}>
+            Loading auth status...
+          </div>
         )}
       </div>
 
-      <div style={{ marginBottom: theme.spacing.md }}>
+      <div>
         <button
-          onClick={startLogin}
+          onClick={() => void startLogin()}
           style={{
-            background: 'none',
-            border: `1px solid ${theme.colors.border}`,
-            borderRadius: theme.radius.sm,
+            border: `1px solid ${theme.colors.borderStrong}`,
+            borderRadius: theme.radius.md,
+            background: `${theme.colors.bg}A0`,
             color: theme.colors.text,
+            padding: '7px 12px',
+            fontFamily: theme.font.display,
+            fontSize: '11px',
+            letterSpacing: '0.08em',
+            textTransform: 'uppercase',
             cursor: 'pointer',
-            fontSize: theme.fontSize.sm,
-            fontFamily: theme.font.sans,
-            padding: '7px 16px',
           }}
         >
           {status?.authenticated ? 'Re-authenticate' : 'Authenticate'}
@@ -311,24 +426,33 @@ function AuthTab() {
 
       {showStream && (
         <div style={cardStyle}>
-          <div style={{ fontFamily: theme.font.sans, fontSize: theme.fontSize.xs, color: theme.colors.muted, marginBottom: theme.spacing.sm, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-            Auth stream
-            {streamDone && <span style={{ color: theme.colors.active, marginLeft: '8px' }}>Done</span>}
+          <div style={{
+            marginBottom: '8px',
+            fontFamily: theme.font.display,
+            fontSize: '10px',
+            letterSpacing: '0.08em',
+            textTransform: 'uppercase',
+            color: theme.colors.textSecondary,
+          }}>
+            Auth Stream {streamDone ? '(Done)' : ''}
           </div>
           <div style={{
             background: theme.colors.bg,
             border: `1px solid ${theme.colors.border}`,
-            borderRadius: theme.radius.sm,
-            padding: theme.spacing.md,
-            fontFamily: theme.font.mono,
-            fontSize: theme.fontSize.xs,
-            color: theme.colors.textSecondary,
+            borderRadius: theme.radius.md,
+            padding: '10px',
             maxHeight: '200px',
             overflowY: 'auto',
+            fontFamily: theme.font.mono,
+            fontSize: '11px',
+            color: theme.colors.textSecondary,
             whiteSpace: 'pre-wrap',
           }}>
-            {streamLines.map((l, i) => <div key={i}>{l}</div>)}
-            {streamLines.length === 0 && <span style={{ color: theme.colors.muted }}>Waiting…</span>}
+            {streamLines.length === 0 ? (
+              <span style={{ color: theme.colors.muted }}>Waiting for auth output...</span>
+            ) : (
+              streamLines.map((line, index) => <div key={`${line}-${index}`}>{line}</div>)
+            )}
           </div>
         </div>
       )}
@@ -336,55 +460,99 @@ function AuthTab() {
   );
 }
 
-// ── SettingsPage ───────────────────────────────────────────────────────────
-
-export default function SettingsPage() {
-  const [tab, setTab] = useState<ActiveTab>('defaults');
-
-  const tabBtnStyle = (active: boolean): React.CSSProperties => ({
-    background: 'none',
-    border: 'none',
-    borderBottom: active ? `2px solid ${theme.colors.accent}` : '2px solid transparent',
-    marginBottom: '-1px',
-    padding: '0 12px',
-    height: '40px',
-    fontSize: theme.fontSize.xs,
-    fontWeight: theme.fontWeight.medium,
-    fontFamily: theme.font.sans,
-    letterSpacing: '0.06em',
-    cursor: 'pointer',
-    color: active ? theme.colors.accent : theme.colors.muted,
-    transition: 'color 0.15s, border-color 0.15s',
-  });
+export default function SettingsPage(): JSX.Element {
+  const scrollToSection = (id: string): void => {
+    const element = document.getElementById(id);
+    element?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
 
   return (
-    <div style={{ maxWidth: theme.maxWidth, margin: '0 auto', padding: `${theme.spacing['2xl']} ${theme.spacing.xl}` }}>
-      <h1 style={{
-        fontFamily: theme.font.sans,
-        fontSize: theme.fontSize.xl,
-        fontWeight: theme.fontWeight.semibold,
-        color: theme.colors.text,
-        marginBottom: theme.spacing.xl,
+    <div style={{
+      maxWidth: theme.maxWidth,
+      margin: '0 auto',
+      padding: `${theme.spacing.xl}`,
+      display: 'flex',
+      flexDirection: 'column',
+      gap: '16px',
+      animation: 'fadeUp 0.22s ease both',
+    }}>
+      <header style={{
+        border: `1px solid ${theme.colors.border}`,
+        borderRadius: theme.radius.lg,
+        background: `linear-gradient(135deg, ${theme.colors.surface} 0%, ${theme.colors.bg} 100%)`,
+        padding: '16px',
       }}>
-        Settings
-      </h1>
+        <h1 style={{
+          margin: 0,
+          fontFamily: theme.font.display,
+          fontSize: theme.fontSize.xl,
+          fontWeight: theme.fontWeight.bold,
+          color: theme.colors.text,
+          letterSpacing: '0.03em',
+        }}>
+          Settings
+        </h1>
+        <p style={{
+          margin: '5px 0 0',
+          color: theme.colors.textSecondary,
+          fontFamily: theme.font.sans,
+          fontSize: theme.fontSize.sm,
+        }}>
+          All operational configuration in one page: defaults, global rules, and authentication.
+        </p>
 
-      {/* Tab bar */}
-      <div style={{
-        display: 'flex',
-        borderBottom: `1px solid ${theme.colors.border}`,
-        marginBottom: theme.spacing.xl,
-        height: '40px',
-        alignItems: 'flex-end',
-      }}>
-        <button onClick={() => setTab('defaults')} style={tabBtnStyle(tab === 'defaults')}>DEFAULTS</button>
-        <button onClick={() => setTab('rules')}    style={tabBtnStyle(tab === 'rules')}>GLOBAL RULES</button>
-        <button onClick={() => setTab('auth')}     style={tabBtnStyle(tab === 'auth')}>AUTH</button>
-      </div>
+        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '12px' }}>
+          {[
+            { id: 'defaults', label: 'Defaults' },
+            { id: 'global-rules', label: 'Global Rules' },
+            { id: 'auth', label: 'Auth' },
+          ].map((item) => (
+            <button
+              key={item.id}
+              onClick={() => scrollToSection(item.id)}
+              style={{
+                border: `1px solid ${theme.colors.borderStrong}`,
+                borderRadius: theme.radius.md,
+                background: `${theme.colors.bg}A0`,
+                color: theme.colors.textSecondary,
+                padding: '6px 10px',
+                fontFamily: theme.font.display,
+                fontSize: '11px',
+                letterSpacing: '0.08em',
+                textTransform: 'uppercase',
+                cursor: 'pointer',
+              }}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+      </header>
 
-      {tab === 'defaults' && <DefaultsTab />}
-      {tab === 'rules'    && <GlobalRulesTab />}
-      {tab === 'auth'     && <AuthTab />}
+      <SectionBlock
+        id="defaults"
+        title="Defaults"
+        description="Baseline model, session lifetime, and schedule used when project-level settings are not overriding it."
+      >
+        <DefaultsSection />
+      </SectionBlock>
+
+      <SectionBlock
+        id="global-rules"
+        title="Global Rules"
+        description="Central CLAUDE.md instructions injected into every project."
+      >
+        <GlobalRulesSection />
+      </SectionBlock>
+
+      <SectionBlock
+        id="auth"
+        title="Authentication"
+        description="Check current Claude login and run re-authentication when needed."
+      >
+        <AuthSection />
+      </SectionBlock>
     </div>
   );
 }
+

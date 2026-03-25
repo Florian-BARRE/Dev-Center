@@ -1,10 +1,10 @@
-import { apiFetch } from './client';
+﻿import { apiFetch } from './client';
 import type {
   ProjectListResponse, Project,
   CreateProjectRequest, UpdateProjectRequest,
 } from './types';
 
-const BASE = '/api/v1';
+const BASE = '/api';
 
 export async function listProjects(): Promise<Project[]> {
   const res = await apiFetch<ProjectListResponse>(`${BASE}/projects`);
@@ -32,3 +32,4 @@ export async function updateProject(id: string, body: UpdateProjectRequest): Pro
 export async function deleteProject(id: string): Promise<void> {
   await apiFetch<void>(`${BASE}/projects/${id}`, { method: 'DELETE' });
 }
+

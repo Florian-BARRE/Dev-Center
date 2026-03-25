@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+﻿import { describe, it, expect } from 'vitest';
 import { render } from '@testing-library/react';
 import StatusBadge from './StatusBadge';
 import CountdownTimer from './CountdownTimer';
@@ -7,12 +7,12 @@ import ModelSelector from './ModelSelector';
 describe('StatusBadge', () => {
   it('renders active badge', () => {
     const { container } = render(<StatusBadge status="active" />);
-    expect(container.textContent).toContain('ACTIVE');
+    expect(container.textContent).toContain('LIVE');
   });
 
   it('renders cloning badge', () => {
     const { container } = render(<StatusBadge status="cloning" />);
-    expect(container.textContent).toContain('CLONING');
+    expect(container.textContent).toContain('CLONE');
   });
 });
 

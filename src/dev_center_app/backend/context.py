@@ -14,6 +14,7 @@ if TYPE_CHECKING:
     from libs.git_manager.git_manager import GitManager
     from libs.auth_checker.auth_checker import AuthChecker
     from libs.scheduler.scheduler import SchedulerService
+    from libs.log_broadcaster.log_broadcaster import LogBroadcaster
 
 
 class CONTEXT:
@@ -40,6 +41,7 @@ class CONTEXT:
     git_manager: "GitManager"
     auth_checker: "AuthChecker"
     scheduler: "SchedulerService"
+    log_broadcaster: "LogBroadcaster"
 
     # Background task handles (set in lifespan)
     watchdog_task: Any

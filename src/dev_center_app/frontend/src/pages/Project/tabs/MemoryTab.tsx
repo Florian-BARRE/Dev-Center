@@ -50,7 +50,7 @@ export default function MemoryTab({ projectId }: MemoryTabProps) {
     <div style={{
       background: theme.colors.surface,
       border: `1px solid ${theme.colors.border}`,
-      borderRadius: theme.radius.md,
+      borderRadius: theme.radius.lg,
       padding: theme.spacing.xl,
       color: theme.colors.muted,
       fontFamily: theme.font.sans,
@@ -64,7 +64,7 @@ export default function MemoryTab({ projectId }: MemoryTabProps) {
     <div style={{
       background: theme.colors.surface,
       border: `1px solid ${theme.colors.border}`,
-      borderRadius: theme.radius.md,
+      borderRadius: theme.radius.lg,
       padding: theme.spacing.xl,
       color: theme.colors.muted,
       fontFamily: theme.font.sans,
@@ -80,7 +80,7 @@ export default function MemoryTab({ projectId }: MemoryTabProps) {
       <div style={{
         background: theme.colors.surface,
         border: `1px solid ${theme.colors.border}`,
-        borderRadius: theme.radius.md,
+        borderRadius: theme.radius.lg,
         overflow: 'hidden',
       }}>
         {files.map((f, i) => (
@@ -114,7 +114,7 @@ export default function MemoryTab({ projectId }: MemoryTabProps) {
       <div style={{
         background: theme.colors.surface,
         border: `1px solid ${theme.colors.border}`,
-        borderRadius: theme.radius.md,
+        borderRadius: theme.radius.lg,
         padding: theme.spacing.lg,
         minHeight: '200px',
       }}>

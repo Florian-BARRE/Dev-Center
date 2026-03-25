@@ -1,5 +1,6 @@
 # ====== Code Summary ======
 # SessionManager — lifecycle of claude remote-control subprocesses.
+# Includes queue-based log buffering and session recovery on restart.
 
 from __future__ import annotations
 import asyncio
@@ -7,7 +8,9 @@ import datetime
 import json
 import os
 import pathlib
+import re
 import signal
+from collections import deque
 from collections.abc import AsyncIterator
 from typing import TYPE_CHECKING, Any
 
@@ -19,13 +22,38 @@ if TYPE_CHECKING:
     from libs.event_bus.event_bus import EventBus
 
 
+# Maximum log lines kept in the per-project ring buffer.
+_LOG_BUFFER_MAXLEN = 500
+
+# Regex that matches all ANSI/VT100 escape sequences.
+# Covers:
+#   - CSI sequences: ESC [ <params> <final>  (cursor movement, colors, erase…)
+#   - OSC sequences: ESC ] <data> ST         (hyperlinks, window title…)
+#   - Single-char sequences: ESC <char>      (RIS, IND, NEL…)
+_ANSI_ESCAPE_RE = re.compile(
+    r"\x1b"                   # ESC
+    r"(?:"
+    r"\[[0-?]*[ -/]*[@-~]"   # CSI  ESC [ ... final-byte
+    r"|\][^\x1b]*(?:\x1b\\|\x07)"  # OSC  ESC ] ... ST-or-BEL
+    r"|[@-Z\\-_]"             # Fe   ESC <single-char>
+    r")"
+)
+
+
 class SessionManager(LoggerClass):
     """
     Manages claude remote-control subprocess lifecycle per project.
 
-    Each project gets one subprocess at a time. All start/stop/renew
-    operations acquire a per-project asyncio.Lock to prevent races
-    between the API, watchdog, and scheduler.
+    Each project gets one subprocess at a time.  All start/stop/renew operations
+    acquire a per-project asyncio.Lock to prevent races between the API, watchdog,
+    and scheduler.
+
+    Log lines from each subprocess stdout are continuously read by a per-project
+    background task (_log_reader).  Lines are accumulated in a ring buffer and
+    fanned out to every active WebSocket subscriber queue so:
+      - Multiple simultaneous viewers see the same stream.
+      - Late-connecting viewers receive the recent history immediately.
+      - No lines are lost when no viewer is connected.
 
     Attributes:
         _state_manager (StateManager): Persisted project state.
@@ -36,6 +64,9 @@ class SessionManager(LoggerClass):
         _renew_threshold_minutes (int): Renew when TTL falls below this.
         _processes (dict[str, Any]): Live subprocess handles.
         _locks (dict[str, asyncio.Lock]): Per-project concurrency locks.
+        _log_buffers (dict[str, deque[str]]): Per-project log line ring buffers.
+        _log_subscribers (dict[str, list[asyncio.Queue]]): Per-project subscriber queues.
+        _log_tasks (dict[str, asyncio.Task]): Per-project background log reader tasks.
     """
 
     def __init__(
@@ -56,6 +87,9 @@ class SessionManager(LoggerClass):
         self._renew_threshold_minutes = renew_threshold_minutes
         self._processes: dict[str, Any] = {}
         self._locks: dict[str, asyncio.Lock] = {}
+        self._log_buffers: dict[str, deque[str]] = {}
+        self._log_subscribers: dict[str, list[asyncio.Queue]] = {}
+        self._log_tasks: dict[str, asyncio.Task] = {}
 
     # ──────────────────────── Private helpers ────────────────────────
 
@@ -75,6 +109,36 @@ class SessionManager(LoggerClass):
     def _started_at(self) -> str:
         """Return current ISO-8601 UTC timestamp."""
         return datetime.datetime.now(datetime.UTC).isoformat()
+
+    def _kill(self, pid: int) -> None:
+        """Send SIGTERM to a process, ignoring not-found and permission errors."""
+        try:
+            os.kill(pid, signal.SIGTERM)
+            self.logger.info(f"Sent SIGTERM to PID {pid}")
+        except ProcessLookupError:
+            self.logger.warning(f"PID {pid} already gone")
+        except PermissionError:
+            self.logger.warning(f"No permission to signal PID {pid}")
+
+    def _is_claude_process(self, pid: int) -> bool:
+        """
+        Check whether a PID is a live claude remote-control process.
+
+        Reads /proc/<pid>/cmdline to verify the process identity, preventing
+        false positives from PID reuse after a container restart.
+
+        Args:
+            pid (int): Process ID to check.
+
+        Returns:
+            bool: True only if the PID exists and belongs to claude remote-control.
+        """
+        try:
+            cmdline = pathlib.Path(f"/proc/{pid}/cmdline").read_text(errors="replace")
+            cmdline = cmdline.replace("\0", " ")
+            return "claude" in cmdline and "remote-control" in cmdline
+        except (OSError, PermissionError):
+            return False
 
     def _trust_workspace(self, workspace: pathlib.Path) -> None:
         """
@@ -105,42 +169,172 @@ class SessionManager(LoggerClass):
             self.logger.warning(f"Could not read '{claude_json_path}': {exc}")
             return
 
-        # 3. Ensure projects dict exists and add trust entry
+        # 3. Ensure projects dict exists and add trust entry if missing
         projects: dict = config.setdefault("projects", {})
         ws_key = str(workspace)
-        if not projects.get(ws_key, {}).get("hasTrustDialogAccepted"):
-            projects[ws_key] = {**projects.get(ws_key, {}), "hasTrustDialogAccepted": True}
-            self.logger.info(f"Pre-trusted workspace '{ws_key}' in ~/.claude.json")
-        else:
+        if projects.get(ws_key, {}).get("hasTrustDialogAccepted"):
             self.logger.debug(f"Workspace '{ws_key}' already trusted")
             return
 
-        # 4. Write back directly.
-        # Note: atomic rename (tmp → target) is not possible when the file is a
-        # Docker bind-mount from Windows (EXDEV: cross-device rename). Write in-place.
+        projects[ws_key] = {**projects.get(ws_key, {}), "hasTrustDialogAccepted": True}
+        self.logger.info(f"Pre-trusted workspace '{ws_key}' in ~/.claude.json")
+
+        # 4. Write back directly (atomic rename not possible across bind-mount boundaries)
         try:
             with claude_json_path.open("w", encoding="utf-8") as fh:
                 json.dump(config, fh, indent=2, ensure_ascii=False)
         except OSError as exc:
             self.logger.warning(f"Could not write '{claude_json_path}': {exc}")
 
-    def _kill(self, pid: int) -> None:
-        """Send SIGTERM to a process, ignoring not-found and permission errors."""
+    # ──────────────────────── Log buffer management ──────────────────
+
+    def _get_log_buffer(self, project_id: str) -> deque[str]:
+        """Get or create the log ring buffer for a project."""
+        if project_id not in self._log_buffers:
+            self._log_buffers[project_id] = deque(maxlen=_LOG_BUFFER_MAXLEN)
+        return self._log_buffers[project_id]
+
+    def _broadcast_log_line(self, project_id: str, line: str) -> None:
+        """
+        Append a log line to the buffer and fan out to all active subscribers.
+
+        Deduplicates within a rolling window: the claude remote-control TUI
+        redraws its status block every second by emitting the same lines
+        repeatedly.  If a line already appears in the last 60 entries of the
+        buffer it is silently dropped so the viewer is not spammed.
+
+        Args:
+            project_id (str): Project slug.
+            line (str): Decoded, ANSI-stripped log line.
+        """
+        # 1. Dedup: skip if the line already appears in the recent buffer window
+        buffer = self._get_log_buffer(project_id)
+        recent = list(buffer)[-60:]
+        if line in recent:
+            return
+
+        # 2. Append to ring buffer
+        buffer.append(line)
+
+        # 2. Put into every subscriber queue (non-blocking; drop if full)
+        subscribers = self._log_subscribers.get(project_id, [])
+        dead: list[asyncio.Queue] = []
+        for q in subscribers:
+            try:
+                q.put_nowait(line)
+            except asyncio.QueueFull:
+                dead.append(q)
+        for q in dead:
+            try:
+                subscribers.remove(q)
+            except ValueError:
+                pass
+
+    async def _log_reader_task(self, project_id: str, proc: Any) -> None:
+        """
+        Background task: drain subprocess stdout and fan out to subscribers.
+
+        Runs until the process exits.  Sends a sentinel None to all subscriber
+        queues when done so they can exit cleanly.
+
+        Args:
+            project_id (str): Project slug.
+            proc: asyncio subprocess handle with a readable stdout pipe.
+        """
+        self.logger.debug(f"Log reader started for '{project_id}'")
         try:
-            os.kill(pid, signal.SIGTERM)
-            self.logger.info(f"Sent SIGTERM to PID {pid}")
-        except ProcessLookupError:
-            self.logger.warning(f"PID {pid} already gone")
-        except PermissionError:
-            self.logger.warning(f"No permission to signal PID {pid}")
+            async for raw in proc.stdout:
+                # Strip ANSI/VT100 escape sequences produced by the claude TUI
+                # (cursor movement, clear-screen, OSC hyperlinks, etc.) so the
+                # log viewer receives clean plain-text lines.
+                line = _ANSI_ESCAPE_RE.sub("", raw.decode(errors="replace")).rstrip()
+                if not line:
+                    # Skip blank lines that result from stripping TUI redraw sequences.
+                    continue
+                self._broadcast_log_line(project_id, line)
+        except Exception as exc:
+            self.logger.warning(f"Log reader error for '{project_id}': {exc}")
+        finally:
+            # Signal all subscribers that the stream has ended
+            for q in self._log_subscribers.get(project_id, []):
+                try:
+                    q.put_nowait(None)
+                except asyncio.QueueFull:
+                    pass
+            self.logger.debug(f"Log reader finished for '{project_id}'")
+
+    def _start_log_reader(self, project_id: str, proc: Any) -> None:
+        """
+        Start the background log reader task for a project.
+
+        Args:
+            project_id (str): Project slug.
+            proc: asyncio subprocess with a readable stdout pipe.
+        """
+        task = asyncio.create_task(self._log_reader_task(project_id, proc))
+        self._log_tasks[project_id] = task
+
+    def _stop_log_reader(self, project_id: str) -> None:
+        """
+        Cancel the background log reader task for a project (if running).
+
+        Args:
+            project_id (str): Project slug.
+        """
+        task = self._log_tasks.pop(project_id, None)
+        if task and not task.done():
+            task.cancel()
 
     # ──────────────────────── Public API ─────────────────────────────
+
+    async def recover_sessions(self) -> None:
+        """
+        Called once at startup to recover sessions from persisted state.
+
+        For each project that had an active session:
+        - If the PID is a live claude remote-control process (same-container
+          restart), leave state intact but re-register the process so log
+          streaming works again.
+        - If the PID is dead (container restart or crash), clear the stale
+          session state and restart the session automatically.
+        """
+        state = self._state_manager.load_projects()
+        for project_id, project in state.projects.items():
+            if project.session is None:
+                continue
+
+            pid = project.session.pid
+            if self._is_claude_process(pid):
+                # Same-container restart — process still alive but we can't
+                # re-attach to its stdout pipe.  Clear state so the UI shows
+                # it as stopped; user can manually restart.
+                self.logger.info(
+                    f"Session PID {pid} for '{project_id}' still alive after restart "
+                    f"— cannot re-attach stdout, clearing state for clean restart"
+                )
+                project.session = None
+                self._state_manager.upsert_project(project)
+                self._kill(pid)
+
+            else:
+                self.logger.info(
+                    f"Session PID {pid} for '{project_id}' is gone — restarting"
+                )
+                project.session = None
+                self._state_manager.upsert_project(project)
+
+            # Restart the session regardless
+            try:
+                await self.start_session(project_id)
+            except Exception as exc:
+                self.logger.warning(
+                    f"Could not recover session for '{project_id}': {exc}"
+                )
 
     async def start_session(self, project_id: str) -> None:
         """
         Launch a claude remote-control session for the project.
 
-        Uses --continue to resume the last conversation in the workspace.
         No-ops if a session is already active.
 
         Args:
@@ -148,7 +342,7 @@ class SessionManager(LoggerClass):
 
         Raises:
             ValueError: If the project is not found in state.
-            RuntimeError: If the subprocess fails to start.
+            RuntimeError: If the workspace directory does not exist.
         """
         async with self._get_lock(project_id):
             # 1. Check project exists
@@ -174,8 +368,8 @@ class SessionManager(LoggerClass):
             # 5. Launch subprocess
             # claude remote-control runs in cwd (no --workspace flag in current CLI).
             # --name: shown in the claude.ai/code session list.
-            # --permission-mode bypassPermissions: skip interactive trust prompts so
-            #   the process runs unattended inside the container.
+            # --permission-mode acceptEdits: auto-accepts file edits without prompting;
+            #   bypassPermissions is blocked when running as root inside the container.
             self.logger.info(f"Starting session for '{project_id}' in '{workspace}'")
 
             proc = await asyncio.create_subprocess_exec(
@@ -187,7 +381,7 @@ class SessionManager(LoggerClass):
                 stderr=asyncio.subprocess.STDOUT,
             )
 
-            # 5. Persist session state
+            # 6. Persist session state
             session = SessionState(
                 pid=proc.pid,
                 workspace=str(workspace),
@@ -199,7 +393,10 @@ class SessionManager(LoggerClass):
             self._processes[project_id] = proc
             self.logger.info(f"Session PID {proc.pid} started for '{project_id}'")
 
-            # 6. Publish event
+            # 7. Start background log reader so stdout is consumed even when no viewer
+            self._start_log_reader(project_id, proc)
+
+            # 8. Publish event
             await self._event_bus.publish(
                 "session.started",
                 {"pid": proc.pid, "workspace": str(workspace), "expires_at": session.expires_at},
@@ -223,17 +420,20 @@ class SessionManager(LoggerClass):
             self._kill(project.session.pid)
             self._processes.pop(project_id, None)
 
-            # 2. Clear session state
+            # 2. Cancel log reader task
+            self._stop_log_reader(project_id)
+
+            # 3. Clear session state
             project.session = None
             self._state_manager.upsert_project(project)
             self.logger.info(f"Session stopped for '{project_id}'")
 
-            # 3. Publish event
+            # 4. Publish event
             await self._event_bus.publish("session.stopped", {}, project_id=project_id)
 
     async def renew_session(self, project_id: str) -> None:
         """
-        Stop and restart the session with --continue.
+        Stop and restart the session.
 
         Args:
             project_id (str): Project slug.
@@ -245,6 +445,7 @@ class SessionManager(LoggerClass):
             if project.session is not None:
                 self._kill(project.session.pid)
                 self._processes.pop(project_id, None)
+                self._stop_log_reader(project_id)
                 project.session = None
                 self._state_manager.upsert_project(project)
 
@@ -254,22 +455,53 @@ class SessionManager(LoggerClass):
 
     async def tail_logs(self, project_id: str) -> AsyncIterator[str]:
         """
-        Yield stdout lines from the active session subprocess.
+        Yield log lines for a project session via a subscriber queue.
 
-        If no process is running, yields a sentinel message and exits.
+        Sends the recent history buffer immediately, then delivers new lines
+        as they arrive.  Multiple simultaneous callers each get their own queue
+        and receive the same lines independently (fan-out).
+
+        If no log reader task is running (session not started), yields a single
+        sentinel message and exits.
 
         Args:
             project_id (str): Project slug.
 
         Yields:
-            str: One decoded, stripped line at a time.
+            str: One decoded, stripped log line at a time.
         """
-        proc = self._processes.get(project_id)
-        if proc is None or proc.stdout is None:
-            yield f"(no active session for '{project_id}')"
-            return
-        async for line in proc.stdout:
-            yield line.decode().rstrip()
+        # 1. Register subscriber queue and get history snapshot
+        buffer = self._get_log_buffer(project_id)
+        history = list(buffer)
+
+        q: asyncio.Queue = asyncio.Queue(maxsize=_LOG_BUFFER_MAXLEN)
+        subscribers = self._log_subscribers.setdefault(project_id, [])
+        subscribers.append(q)
+
+        try:
+            # 2. Replay history for late-joining viewers
+            for line in history:
+                yield line
+
+            # 3. If no log reader is running (session not started), exit
+            if project_id not in self._log_tasks:
+                yield f"(no active session for '{project_id}')"
+                return
+
+            # 4. Stream live lines from the queue
+            while True:
+                line = await q.get()
+                if line is None:
+                    # Sentinel: log reader finished (process exited)
+                    break
+                yield line
+
+        finally:
+            # 5. Always unregister the queue
+            try:
+                subscribers.remove(q)
+            except ValueError:
+                pass
 
     def update_hash(self, project_id: str, hash_value: str) -> None:
         """

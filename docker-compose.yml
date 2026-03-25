@@ -1,76 +1,92 @@
-# dev-center — Production Docker Compose
+# Production Docker Compose for Dev Center.
 #
-# Setup:
-#   cp services/dev-center-app/.env.example services/dev-center-app/.env
-#   cp services/vscode/.env.example services/vscode/.env
-#   cp services/common/.env.example services/common/.env
-#   docker compose --env-file services/common/.env up -d --build
+# Usage:
+#   1) Copy env examples and fill required values:
+#      cp services/common/.env.example services/common/.env
+#      cp services/dev-center-app/.env.example services/dev-center-app/.env
+#      cp services/vscode/.env.example services/vscode/.env
+#   2) Start production stack:
+#      docker compose --env-file services/common/.env up -d --build
 #
-# The --env-file flag loads services/common/.env for variable interpolation.
+# Production exposes two services:
+# - dev-center-app: FastAPI backend that also serves the built frontend bundle.
+# - code-server: optional browser IDE for mounted project workspaces.
 
 services:
   dev-center-app:
-    # FastAPI backend + React dashboard + session manager.
+    # Stable container name keeps logs and debugging commands predictable.
+    container_name: dev-center-backend
     build:
-      context: src
+      # Build from src/ to keep Docker paths explicit and short.
+      context: ./src
       dockerfile: dev_center_app/Dockerfile
-    image: dev-center-app:latest
+      # Use the production target that includes built frontend assets.
+      target: runtime
+    image: dev-center-backend:latest
     restart: unless-stopped
+
+    # Backend API and built frontend are served on the same HTTP port.
     ports:
-      # Bind the API + UI port; override DEV_CENTER_PORT in services/common/.env.
       - "${DEV_CENTER_PORT:-8000}:8000"
+
+    # Backend-only runtime variables.
     env_file:
-      # App environment variables (logging levels, paths, etc.)
-      - services/dev-center-app/.env
-    volumes:
-      # Project workspace storage — shared read-write with code-server.
-      - ${DATA_ROOT}/workspaces:/workspaces
-      # Persistent state: projects.json, global-config.json, global-rules.md.
-      - ${DATA_ROOT}/data:/data
-      # Claude CLI credentials — read-write so token refreshes persist to host.
-      # Mounted at /root/.claude because HOME=/root inside the container.
-      # Claude Code reads credentials from $HOME/.claude by default.
-      - ~/.claude:/root/.claude
-      - ~/.claude.json:/root/.claude.json
-      # SSH key for git clone operations (optional; defaults to ~/.ssh).
-      # Mounted at /root/.ssh so git finds keys when HOME=/root.
-      - ${SSH_KEY_PATH:-~/.ssh}:/root/.ssh:ro
-      # Docker socket — gives Claude Code sessions access to the host Docker
-      # daemon so they can spawn containers (docker run, docker compose, etc.).
-      # Security note: access to this socket is equivalent to root on the host.
-      - /var/run/docker.sock:/var/run/docker.sock
+      - ./services/dev-center-app/.env
     environment:
-      # Override HOME to a clean Linux path.
-      # Docker Desktop on Windows injects HOME=/c/Users/<user> (Git Bash format)
-      # which breaks git path resolution and credential prompts inside the container.
-      - HOME=/root
-      # Path configuration injected at runtime.
-      - DATA_DIR=/data
-      - WORKSPACES_DIR=/workspaces
-      - CLAUDE_DIR=/root/.claude
+      # Internal paths consumed by runtime_config.py.
+      DATA_DIR: /data
+      WORKSPACES_DIR: /workspaces
+      CLAUDE_DIR: /root/.claude
+
+    # Host mounts that must persist across container restarts.
+    volumes:
+      # Project repositories cloned by the app.
+      - ${DATA_ROOT}/workspaces:/workspaces
+      # App state (projects.json, settings.json, schedules, shared rules).
+      - ${DATA_ROOT}/data:/data
+      # Claude credentials from the host machine.
+      - ${CLAUDE_HOST_DIR:-~/.claude}:/root/.claude
+      # SSH keys for private git access (read-only by design).
+      - ${SSH_KEY_PATH:-~/.ssh}:/root/.ssh:ro
+      # Host Docker socket so Claude Code can create project containers.
+      - /var/run/docker.sock:/var/run/docker.sock
+
+    # Health endpoint used by start.sh and orchestration checks.
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=2)"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
     networks:
       - dev-center-net
 
   code-server:
-    # VS Code in the browser — file browsing for project workspaces.
+    # Browser IDE to inspect/edit repositories mounted in /workspaces.
+    container_name: dev-center-code-server
     image: codercom/code-server:latest
     restart: unless-stopped
+
+    # Host port for VS Code in browser.
     ports:
-      # Bind the VS Code browser port; override CODE_SERVER_PORT in services/common/.env.
       - "${CODE_SERVER_PORT:-8443}:8080"
+
+    # Service-scoped env for password/no-password auth mode.
     env_file:
-      # VS Code server environment (optional password auth).
-      - services/vscode/.env
+      - ./services/vscode/.env
+
+    # Share the same workspace root used by dev-center-app.
     volumes:
-      # Same workspace volume as dev-center-app so files are visible in the editor.
       - ${DATA_ROOT}/workspaces:/workspaces
+
+    # If PASSWORD is set, require password auth. If empty, disable auth.
+    entrypoint: ["/bin/sh", "-c"]
+    command: ['if [ -n "$$PASSWORD" ]; then exec code-server --auth password /workspaces; else exec code-server --auth none /workspaces; fi']
+
     networks:
       - dev-center-net
-    entrypoint: ["/bin/sh", "-c"]
-    # Start with password auth if PASSWORD is set; otherwise no auth.
-    command: ['if [ -n "$$PASSWORD" ]; then exec code-server --auth password /workspaces; else exec code-server --auth none /workspaces; fi']
 
 networks:
   dev-center-net:
-    # Bridge network isolates the dev-center services from the host.
     driver: bridge

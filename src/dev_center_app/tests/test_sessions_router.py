@@ -1,4 +1,4 @@
-# tests/test_sessions_router.py
+﻿# tests/test_sessions_router.py
 import pytest
 from unittest.mock import patch, MagicMock, AsyncMock
 from httpx import AsyncClient, ASGITransport
@@ -42,7 +42,7 @@ async def client(tmp_data, tmp_path):
 async def test_start_session(client):
     mock_proc = _make_proc(999)
     with patch("asyncio.create_subprocess_exec", new=AsyncMock(return_value=mock_proc)):
-        resp = await client.post("/api/v1/projects/myproj/session/start")
+        resp = await client.post("/api/projects/myproj/session/start")
     assert resp.status_code == 200
     assert resp.json()["session"]["pid"] == 999
 
@@ -51,14 +51,14 @@ async def test_start_session(client):
 async def test_start_session_already_active(client):
     mock_proc = _make_proc(1)
     with patch("asyncio.create_subprocess_exec", new=AsyncMock(return_value=mock_proc)):
-        await client.post("/api/v1/projects/myproj/session/start")
-    resp = await client.post("/api/v1/projects/myproj/session/start")
+        await client.post("/api/projects/myproj/session/start")
+    resp = await client.post("/api/projects/myproj/session/start")
     assert resp.status_code == 422
 
 
 @pytest.mark.asyncio
 async def test_start_session_not_found(client):
-    resp = await client.post("/api/v1/projects/nonexistent/session/start")
+    resp = await client.post("/api/projects/nonexistent/session/start")
     assert resp.status_code == 404
 
 
@@ -66,9 +66,9 @@ async def test_start_session_not_found(client):
 async def test_stop_session(client):
     mock_proc = _make_proc(2)
     with patch("asyncio.create_subprocess_exec", new=AsyncMock(return_value=mock_proc)):
-        await client.post("/api/v1/projects/myproj/session/start")
+        await client.post("/api/projects/myproj/session/start")
     with patch("os.kill"):
-        resp = await client.post("/api/v1/projects/myproj/session/stop")
+        resp = await client.post("/api/projects/myproj/session/stop")
     assert resp.status_code == 204
     p = CONTEXT.state_manager.get_project("myproj")
     assert p.session is None
@@ -76,5 +76,6 @@ async def test_stop_session(client):
 
 @pytest.mark.asyncio
 async def test_stop_session_not_found(client):
-    resp = await client.post("/api/v1/projects/nonexistent/session/stop")
+    resp = await client.post("/api/projects/nonexistent/session/stop")
     assert resp.status_code == 404
+

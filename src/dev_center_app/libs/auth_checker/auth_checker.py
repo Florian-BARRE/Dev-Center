@@ -1,100 +1,82 @@
-# ====== Code Summary ======
-# AuthChecker — detects Claude CLI credentials and spawns auth flow.
+﻿# ====== Code Summary ======
+# AuthChecker detects Claude CLI credentials and manages the auth flow process.
 
 from __future__ import annotations
+
 import asyncio
 import json
 import pathlib
 import time
+
 from loggerplusplus import LoggerClass
 
 
 class AuthChecker(LoggerClass):
     """
-    Checks for valid Claude CLI credentials and manages the auth flow.
-
-    Looks for credentials in two locations (checked in order):
-    1. ~/.claude/.credentials.json — OAuth token with expiry
-    2. ~/.claude.json — legacy token file
+    Check for valid Claude CLI credentials and manage the login flow.
 
     Attributes:
         _claude_dir (pathlib.Path): Claude home directory (~/.claude).
-        _claude_json_path (pathlib.Path | None): Optional path to ~/.claude.json.
         _auth_process (asyncio.subprocess.Process | None): Running `claude auth login` process.
     """
 
-    def __init__(
-        self,
-        claude_dir: pathlib.Path,
-        claude_json_path: pathlib.Path | None = None,
-    ) -> None:
+    def __init__(self, claude_dir: pathlib.Path) -> None:
+        """
+        Initialize the auth checker.
+
+        Args:
+            claude_dir (pathlib.Path): Path to Claude credentials directory.
+        """
         LoggerClass.__init__(self)
         self._claude_dir = claude_dir
-        self._claude_json_path = claude_json_path
         self._auth_process: asyncio.subprocess.Process | None = None
 
-    # ──────────────────────── Private helpers ────────────────────────
-
     def _read_credentials(self) -> dict | None:
-        """Read ~/.claude/.credentials.json if it exists."""
-        creds_path = self._claude_dir / ".credentials.json"
+        """
+        Read ~/.claude/.credentials.json if it exists and is valid JSON.
+
+        Returns:
+            dict | None: Parsed credentials payload, otherwise None.
+        """
+        creds_path = self._claude_dir / '.credentials.json'
         if not creds_path.exists():
             return None
+
         try:
-            return json.loads(creds_path.read_text(encoding="utf-8"))
+            return json.loads(creds_path.read_text(encoding='utf-8'))
         except (json.JSONDecodeError, OSError):
             return None
-
-    def _read_claude_json(self) -> dict | None:
-        """Read ~/.claude.json if it exists."""
-        path = self._claude_json_path
-        if path is None:
-            path = self._claude_dir.parent / ".claude.json"
-        if not path.exists():
-            return None
-        try:
-            return json.loads(path.read_text(encoding="utf-8"))
-        except (json.JSONDecodeError, OSError):
-            return None
-
-    # ──────────────────────── Public API ─────────────────────────────
 
     def is_authenticated(self) -> bool:
         """
-        Return True if valid, non-expired Claude credentials are found.
+        Return True when a non-expired Claude OAuth token is present.
 
         Returns:
-            bool: True if authenticated.
+            bool: True if authenticated, False otherwise.
         """
-        # 1. Check .credentials.json (primary)
-        creds = self._read_credentials()
-        if creds is not None:
-            oauth = creds.get("claudeAiOauth", {})
-            token = oauth.get("accessToken", "")
-            expires_at_ms = oauth.get("expiresAt", 0)
-            # expiresAt is milliseconds since epoch
-            if token and expires_at_ms > time.time() * 1000:
-                return True
+        # 1. Read credentials payload from the primary Claude file.
+        credentials = self._read_credentials()
+        if credentials is None:
+            return False
 
-        # 2. Check .claude.json (legacy fallback)
-        claude_json = self._read_claude_json()
-        if claude_json is not None:
-            if claude_json.get("oauthToken") or claude_json.get("accessToken"):
-                return True
-
-        return False
+        # 2. Validate token presence and expiry timestamp.
+        oauth_payload = credentials.get('claudeAiOauth', {})
+        token = oauth_payload.get('accessToken', '')
+        expires_at_ms = oauth_payload.get('expiresAt', 0)
+        return bool(token) and bool(expires_at_ms > time.time() * 1000)
 
     def get_email(self) -> str | None:
         """
-        Return the authenticated user's email address, if available.
+        Return authenticated user email when available.
 
         Returns:
-            str | None: Email address or None.
+            str | None: Email address from credentials file, if present.
         """
-        creds = self._read_credentials()
-        if creds is not None:
-            return creds.get("claudeAiOauth", {}).get("emailAddress")
-        return None
+        credentials = self._read_credentials()
+        if credentials is None:
+            return None
+
+        return credentials.get('claudeAiOauth', {}).get('emailAddress')
 
     async def start_login(self) -> asyncio.subprocess.Process:
         """
@@ -104,24 +86,28 @@ class AuthChecker(LoggerClass):
             asyncio.subprocess.Process: Running auth subprocess.
 
         Raises:
-            FileNotFoundError: If the `claude` binary is not in PATH.
+            FileNotFoundError: If `claude` binary is not available in PATH.
         """
-        self.logger.info(f"Starting claude auth login")
-        proc = await asyncio.create_subprocess_exec(
-            "claude", "auth", "login",
+        self.logger.info(f'Starting claude auth login')
+        process = await asyncio.create_subprocess_exec(
+            'claude', 'auth', 'login',
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.STDOUT,
         )
-        self._auth_process = proc
-        return proc
+        self._auth_process = process
+        return process
 
     def get_active_login_process(self) -> asyncio.subprocess.Process | None:
         """
-        Return the currently running login process, if any.
+        Return currently running login process, if any.
 
         Returns:
             asyncio.subprocess.Process | None: Active process or None.
         """
-        if self._auth_process is not None and self._auth_process.returncode is None:
+        if self._auth_process is None:
+            return None
+
+        if self._auth_process.returncode is None:
             return self._auth_process
+
         return None

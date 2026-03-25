@@ -2,139 +2,163 @@
 
 ###############################################################################
 # Build note:
-# Built from the repository root with the src/ directory as context.
+# Built from repository root with src/ as the build context.
 # Example:
-#   docker build -f src/dev_center_app/Dockerfile -t dev-center-app:latest src
+#   docker build -f src/dev_center_app/Dockerfile -t dev-center-backend:latest src
 ###############################################################################
 
 ###############################################################################
-# Stage 1: Python dependency builder
+# Stage 1: Python dependency builder (uv + Python 3.12)
 #
 # Goal:
-# - Install locked production Python dependencies into /opt/venv using uv.
-# - Isolate dependency installation from application code for cache efficiency.
+# - Create the virtual environment at /opt/venv
+# - Install locked production dependencies from uv.lock only
+# - Keep dependency installation cached separately from source code
 ###############################################################################
 FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim AS py-build
 
+# Keep all builder files under /workspace for clarity.
 WORKDIR /workspace
 
-# UV_PROJECT_ENVIRONMENT tells uv where to create the virtual environment.
+# Tell uv where to create the project virtual environment.
 ENV UV_PROJECT_ENVIRONMENT=/opt/venv
 
-# Copy lock metadata first — dependency cache is invalidated only when these change.
+# Copy dependency metadata first so Docker can cache this layer.
 COPY dev_center_app/pyproject.toml dev_center_app/uv.lock /workspace/dev_center_app/
 
-# Install locked production dependencies only.
-# --frozen: fail if lock file is out of sync with pyproject.toml.
-# --no-dev: skip development/test dependencies.
-# cache mount: speeds up repeated local builds without network round-trips.
+# Install only locked production dependencies.
+# --frozen: lock file must match pyproject.toml
+# --no-dev: skip development/test dependencies
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev --project /workspace/dev_center_app
 
 ###############################################################################
-# Stage 2: Frontend builder
+# Stage 2: Frontend production builder (Node + Vite)
 #
 # Goal:
-# - Install Node dependencies reproducibly with npm ci.
-# - Build the optimised production React+Vite bundle into frontend/dist.
-# - Install the Claude Code CLI globally so it can be copied into the runtime
-#   image without needing Node.js at runtime.
+# - Install frontend dependencies reproducibly
+# - Build the production bundle into frontend/dist
 ###############################################################################
 FROM node:22-bookworm-slim AS ui-build
 
+# Build inside the frontend directory to keep paths explicit.
 WORKDIR /workspace/dev_center_app/frontend
 
-# Copy package descriptors first to enable npm dependency-layer caching.
+# Copy package manifests first to maximize npm cache reuse.
 COPY dev_center_app/frontend/package.json dev_center_app/frontend/package-lock.json ./
 
-# Reproducible install strictly from package-lock.json.
+# Install exact dependencies from package-lock.json.
 RUN npm ci
 
-# Copy frontend source and compile production bundle.
+# Copy frontend source code and create the production bundle.
 COPY dev_center_app/frontend/ ./
 RUN npm run build
 
-# Install Claude Code CLI globally.
-# The compiled JS bundle and the `claude` wrapper script will be copied into
-# the runtime image so the session manager can spawn `claude remote-control`.
+###############################################################################
+# Stage 3: Claude CLI builder (Node global package)
+#
+# Goal:
+# - Install the Claude Code CLI once
+# - Copy Node + CLI artifacts into runtime stages without shipping npm tooling
+###############################################################################
+FROM node:22-bookworm-slim AS claude-cli
+
+# Install Claude Code CLI globally so /usr/local/bin/claude is generated.
 RUN npm install -g @anthropic-ai/claude-code
 
 ###############################################################################
-# Stage 3: Runtime image
+# Stage 4: Docker CLI source
 #
 # Goal:
-# - Contain only what is needed to run the service — no build tools.
-# - Expose a clean filesystem:
-#     /app/dev_center_app              -> backend application source
-#     /app/dev_center_app/frontend/dist -> compiled React bundle (served as static files)
+# - Provide a standalone Docker client binary for runtime containers
+# - Avoid adding Docker apt repositories inside the Python runtime image
 ###############################################################################
-FROM python:3.12-slim-bookworm AS runtime
+FROM docker:28-cli AS docker-cli
 
-# Runtime Python best practices:
-# - PYTHONDONTWRITEBYTECODE: suppress .pyc file creation.
-# - PYTHONUNBUFFERED: logs appear immediately in stdout/stderr.
-# - PATH: make the uv-built venv the active Python environment.
+###############################################################################
+# Stage 5: Shared runtime base (used by prod and dev targets)
+#
+# Goal:
+# - Keep one explicit runtime foundation for both production and development
+# - Include only required system tools (git + ssh) and runtime CLIs
+###############################################################################
+FROM python:3.12-slim-bookworm AS runtime-base
+
+# Runtime Python defaults and module path configuration.
+# PYTHONDONTWRITEBYTECODE: do not write .pyc files to container filesystem
+# PYTHONUNBUFFERED: flush logs immediately to stdout/stderr
+# PATH: activate /opt/venv binaries by default
+# PYTHONPATH: allow absolute imports from /app/dev_center_app
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PATH="/opt/venv/bin:${PATH}" \
-    # Add the app source root to Python's module search path so that absolute
-    # imports (from config, from backend, from libs.*) resolve correctly when
-    # uvicorn is invoked as `uvicorn dev_center_app.entrypoint:app` from /app.
     PYTHONPATH="/app/dev_center_app"
 
-# Install runtime system dependencies:
-# - git: required by the git clone feature.
-# - curl: required by the Docker CLI apt repository setup.
-# - docker-ce-cli: Docker client so Claude Code sessions can spawn containers
-#   on the host daemon via the mounted /var/run/docker.sock socket.
-# Clean up apt cache to keep the image minimal.
+# Install only required OS tools:
+# - git: clone/pull/push project repositories
+# - openssh-client: SSH transport for private git remotes
+# - ca-certificates: TLS certificates for HTTPS and package downloads
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends git openssh-client curl ca-certificates gnupg \
-    && install -m 0755 -d /etc/apt/keyrings \
-    && curl -fsSL https://download.docker.com/linux/debian/gpg \
-       -o /etc/apt/keyrings/docker.asc \
-    && chmod a+r /etc/apt/keyrings/docker.asc \
-    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] \
-       https://download.docker.com/linux/debian bookworm stable" \
-       > /etc/apt/sources.list.d/docker.list \
-    && apt-get update \
-    && apt-get install -y --no-install-recommends docker-ce-cli \
+    && apt-get install -y --no-install-recommends git openssh-client ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
+# Keep application files under /app.
 WORKDIR /app
 
-# Copy prebuilt Python virtual environment from the builder stage.
+# Copy the prebuilt Python virtual environment from py-build stage.
 COPY --from=py-build /opt/venv /opt/venv
 
-# Copy backend application source code.
-COPY dev_center_app /app/dev_center_app
+# Copy Docker client binary so the app can talk to host docker.sock.
+COPY --from=docker-cli /usr/local/bin/docker /usr/local/bin/docker
 
-# Copy compiled React bundle from the frontend builder stage.
-# FastAPI mounts this directory as static files at the root URL.
-COPY --from=ui-build /workspace/dev_center_app/frontend/dist /app/dev_center_app/frontend/dist
+# Copy Node runtime and Claude Code CLI files from claude-cli stage.
+COPY --from=claude-cli /usr/local/bin/node /usr/local/bin/node
+COPY --from=claude-cli /usr/local/bin/claude /usr/local/bin/claude
+COPY --from=claude-cli /usr/local/lib/node_modules/@anthropic-ai/claude-code \
+                        /usr/local/lib/node_modules/@anthropic-ai/claude-code
 
-# Copy Node.js runtime from the frontend builder stage.
-# Required to execute the Claude Code CLI JS bundle at runtime.
-COPY --from=ui-build /usr/local/bin/node /usr/local/bin/node
-
-# Copy the Claude Code CLI from the frontend builder stage.
-# The global npm install places the package under /usr/local/lib/node_modules
-# and a wrapper script at /usr/local/bin/claude.
-COPY --from=ui-build /usr/local/lib/node_modules/@anthropic-ai/claude-code \
-                     /usr/local/lib/node_modules/@anthropic-ai/claude-code
-COPY --from=ui-build /usr/local/bin/claude /usr/local/bin/claude
-
-# Copy the startup entrypoint script.
-# This script fixes SSH key permissions at container start (Windows Docker mounts
-# deliver keys with 0777 which OpenSSH rejects) and then exec's uvicorn.
+# Copy startup entrypoint script that fixes SSH key permissions at runtime.
 COPY dev_center_app/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
-EXPOSE 8000
-
-# Use the entrypoint script to fix SSH permissions before launching uvicorn.
+# Use entrypoint wrapper for SSH permissions, then execute CMD.
 ENTRYPOINT ["docker-entrypoint.sh"]
 
-# Default command passed to the entrypoint — start the FastAPI app via uvicorn.
-# The entrypoint.py module exposes the FastAPI `app` object.
+###############################################################################
+# Stage 6: Production runtime target
+#
+# Goal:
+# - Run FastAPI backend
+# - Serve compiled frontend static assets from the same container
+###############################################################################
+FROM runtime-base AS runtime
+
+# Copy backend source code.
+COPY dev_center_app /app/dev_center_app
+
+# Copy frontend production assets consumed by entrypoint.py static mount.
+COPY --from=ui-build /workspace/dev_center_app/frontend/dist /app/dev_center_app/frontend/dist
+
+# Expose backend HTTP port.
+EXPOSE 8000
+
+# Start FastAPI app in production mode (no autoreload).
 CMD ["uvicorn", "dev_center_app.entrypoint:app", "--host", "0.0.0.0", "--port", "8000"]
+
+###############################################################################
+# Stage 7: Development runtime target
+#
+# Goal:
+# - Provide a lean backend image for local development
+# - Source code is bind-mounted by docker-compose.dev.yml
+###############################################################################
+FROM runtime-base AS dev-runtime
+
+# Copy backend source as a fallback; bind mount will override it in dev.
+COPY dev_center_app /app/dev_center_app
+
+# Expose backend HTTP port used by uvicorn in development.
+EXPOSE 8000
+
+# Default dev command (can be overridden by compose).
+CMD ["uvicorn", "dev_center_app.entrypoint:app", "--host", "0.0.0.0", "--port", "8000", "--reload", "--reload-dir", "/app/dev_center_app"]

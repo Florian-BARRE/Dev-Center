@@ -20,3 +20,14 @@ class RulesResponse(_CamelModel):
 class UpdateRulesRequest(_CamelModel):
     """Request body for updating CLAUDE.md content."""
     content: str
+
+
+class RulesFile(_CamelModel):
+    """Metadata for an uploaded rule file."""
+    filename: str
+    size: int
+
+
+class RulesFilesResponse(_CamelModel):
+    """List of uploaded rule files for a project."""
+    files: list[RulesFile]

@@ -1,130 +1,300 @@
 // ====== Code Summary ======
-// Monitoring — project status table + real-time events feed.
+// Monitoring — dense ops table + real-time event feed.
+// Designed as a live operations console: sticky header, status-colored rows, split layout.
 
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import theme from '../../theme';
 import { getMonitoring } from '../../api/monitoring';
 import EventFeed from '../../components/EventFeed';
 import CountdownTimer from '../../components/CountdownTimer';
-import StatusBadge from '../../components/StatusBadge';
 import type { ProjectMonitorRow } from '../../api/types';
 
 const REFRESH_INTERVAL = 10_000;
 
-const CONTENT_STYLE: React.CSSProperties = {
-  maxWidth: theme.maxWidth,
-  margin: '0 auto',
-  padding: `${theme.spacing['2xl']} ${theme.spacing.xl}`,
-};
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+function statusDotColor(status: string): string {
+  switch (status) {
+    case 'active':  return theme.colors.active;
+    case 'cloning': return theme.colors.warning;
+    case 'error':   return theme.colors.danger;
+    default:        return theme.colors.muted;
+  }
+}
+
+function statusText(status: string): string {
+  switch (status) {
+    case 'active':  return 'LIVE';
+    case 'cloning': return 'CLONE';
+    case 'error':   return 'ERR';
+    default:        return 'IDLE';
+  }
+}
+
+// ── Panel label ──────────────────────────────────────────────────────────────
+
+function PanelLabel({ label, extra }: { label: string; extra?: React.ReactNode }) {
+  return (
+    <div style={{
+      display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+      padding: '6px 14px',
+      background: `${theme.colors.bg}80`,
+      borderBottom: `1px solid ${theme.colors.border}`,
+    }}>
+      <span style={{
+        fontFamily: theme.font.display, fontSize: '10px',
+        fontWeight: theme.fontWeight.bold, letterSpacing: '0.12em',
+        color: theme.colors.textSecondary, textTransform: 'uppercase',
+        display: 'flex', alignItems: 'center', gap: '6px',
+      }}>
+        <span style={{ color: theme.colors.accent, opacity: 0.7 }}>&gt;</span>
+        {label}
+      </span>
+      {extra}
+    </div>
+  );
+}
+
+// ── Table row ────────────────────────────────────────────────────────────────
+
+function ProjectRow({ row, idx }: { row: ProjectMonitorRow; idx: number }) {
+  const [hovered, setHovered] = useState(false);
+  const isActive = row.status === 'active';
+  const dot      = statusDotColor(row.status);
+
+  return (
+    <div
+      style={{
+        display: 'grid',
+        gridTemplateColumns: '16px 1fr 60px 60px 80px minmax(0, 220px)',
+        gap: '0 12px',
+        alignItems: 'center',
+        height: '36px',
+        padding: '0 14px',
+        borderBottom: `1px solid ${theme.colors.border}40`,
+        background: hovered
+          ? `${theme.colors.accent}08`
+          : isActive
+            ? `${theme.colors.active}04`
+            : idx % 2 === 1
+              ? `${theme.colors.surface}CC`
+              : 'transparent',
+        transition: 'background 0.12s',
+      }}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+    >
+      {/* Status LED */}
+      <span style={{
+        width: '6px', height: '6px', borderRadius: '50%',
+        background: dot, display: 'inline-block',
+        justifySelf: 'center',
+        boxShadow: isActive ? `0 0 6px ${dot}` : 'none',
+        animation: isActive ? 'pulse-dot 2.5s infinite' : 'none',
+      }} />
+
+      {/* Project name */}
+      <Link to={`/projects/${row.id}`} style={{
+        fontFamily: theme.font.display,
+        fontSize: theme.fontSize.sm,
+        fontWeight: isActive ? theme.fontWeight.semibold : theme.fontWeight.normal,
+        color: hovered ? theme.colors.accent : isActive ? theme.colors.text : theme.colors.textSecondary,
+        textDecoration: 'none',
+        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+        letterSpacing: '0.02em',
+        transition: 'color 0.12s',
+      }}>
+        {row.name}
+      </Link>
+
+      {/* Status */}
+      <span style={{
+        fontFamily: theme.font.display, fontSize: '10px',
+        fontWeight: theme.fontWeight.bold, letterSpacing: '0.08em',
+        color: dot, opacity: isActive ? 1 : 0.65,
+      }}>
+        {statusText(row.status)}
+      </span>
+
+      {/* PID */}
+      <span style={{
+        fontFamily: theme.font.mono, fontSize: '11px',
+        color: row.pid ? theme.colors.textSecondary : theme.colors.muted,
+      }}>
+        {row.pid ?? '—'}
+      </span>
+
+      {/* TTL */}
+      <span style={{ fontFamily: theme.font.mono, fontSize: theme.fontSize.sm }}>
+        {row.expiresAt ? <CountdownTimer expiresAt={row.expiresAt} /> : (
+          <span style={{ color: theme.colors.muted }}>——</span>
+        )}
+      </span>
+
+      {/* Workspace path */}
+      <span style={{
+        fontFamily: theme.font.mono, fontSize: '10px',
+        color: theme.colors.muted,
+        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+        opacity: 0.7,
+      }}>
+        {row.workspacePath || '—'}
+      </span>
+    </div>
+  );
+}
+
+// ── Column headers ───────────────────────────────────────────────────────────
+
+function TableHeaders() {
+  const col: React.CSSProperties = {
+    fontFamily: theme.font.display, fontSize: '9px',
+    fontWeight: theme.fontWeight.bold, letterSpacing: '0.12em',
+    textTransform: 'uppercase', color: theme.colors.muted,
+  };
+  return (
+    <div style={{
+      display: 'grid',
+      gridTemplateColumns: '16px 1fr 60px 60px 80px minmax(0, 220px)',
+      gap: '0 12px',
+      alignItems: 'center',
+      padding: '5px 14px',
+      borderBottom: `1px solid ${theme.colors.border}`,
+      background: `${theme.colors.bg}60`,
+      position: 'sticky', top: 0,
+    }}>
+      <span />
+      <span style={col}>PROJECT</span>
+      <span style={col}>ST</span>
+      <span style={col}>PID</span>
+      <span style={col}>TTL</span>
+      <span style={col}>WORKSPACE</span>
+    </div>
+  );
+}
+
+// ── Page ─────────────────────────────────────────────────────────────────────
 
 export default function MonitoringPage() {
-  const [rows, setRows] = useState<ProjectMonitorRow[]>([]);
+  const [rows, setRows]       = useState<ProjectMonitorRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
+  const timerRef = useRef<ReturnType<typeof setInterval>>();
 
   const load = useCallback(async () => {
     try {
       const res = await getMonitoring();
       setRows(res.projects);
+      setLastRefresh(new Date());
     } catch { /* retain */ }
     finally { setLoading(false); }
   }, []);
 
   useEffect(() => {
     load();
-    const id = setInterval(load, REFRESH_INTERVAL);
-    return () => clearInterval(id);
+    timerRef.current = setInterval(load, REFRESH_INTERVAL);
+    return () => clearInterval(timerRef.current);
   }, [load]);
 
-  const thStyle: React.CSSProperties = {
-    fontFamily: theme.font.sans,
-    fontSize: theme.fontSize.xs,
-    fontWeight: theme.fontWeight.medium,
-    color: theme.colors.muted,
-    textTransform: 'uppercase',
-    letterSpacing: '0.08em',
-    padding: '8px 12px',
-    borderBottom: `1px solid ${theme.colors.border}`,
-    textAlign: 'left',
-  };
-
-  const tdStyle: React.CSSProperties = {
-    fontFamily: theme.font.mono,
-    fontSize: theme.fontSize.sm,
-    color: theme.colors.text,
-    padding: '10px 12px',
-    borderBottom: `1px solid ${theme.colors.border}`,
-    verticalAlign: 'middle',
-  };
+  const activeCount = rows.filter(r => r.status === 'active').length;
 
   return (
-    <div style={CONTENT_STYLE}>
-      <h1 style={{
-        fontFamily: theme.font.sans,
-        fontSize: theme.fontSize.xl,
-        fontWeight: theme.fontWeight.semibold,
-        color: theme.colors.text,
-        marginBottom: theme.spacing['2xl'],
-      }}>
-        Monitoring
-      </h1>
+    <div style={{
+      maxWidth: theme.maxWidth,
+      margin: '0 auto',
+      padding: theme.spacing.xl,
+      display: 'flex',
+      flexDirection: 'column',
+      gap: '0',
+      animation: 'fadeUp 0.22s ease both',
+    }}>
 
-      {/* Projects table */}
+      {/* Page header */}
       <div style={{
-        background: theme.colors.surface,
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        padding: '5px 14px',
+        background: `${theme.colors.surface}CC`,
         border: `1px solid ${theme.colors.border}`,
-        borderRadius: theme.radius.md,
-        overflow: 'hidden',
-        marginBottom: theme.spacing['2xl'],
+        borderBottom: 'none',
       }}>
-        {loading ? (
-          <div style={{ padding: theme.spacing.xl, color: theme.colors.muted, fontFamily: theme.font.sans, fontSize: theme.fontSize.sm }}>
-            Loading…
-          </div>
-        ) : (
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead>
-              <tr>
-                <th style={thStyle}>Project</th>
-                <th style={thStyle}>Status</th>
-                <th style={thStyle}>PID</th>
-                <th style={thStyle}>TTL</th>
-                <th style={thStyle}>Workspace</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.length === 0 ? (
-                <tr>
-                  <td colSpan={5} style={{ ...tdStyle, color: theme.colors.muted, textAlign: 'center', fontFamily: theme.font.sans }}>
-                    No projects
-                  </td>
-                </tr>
-              ) : rows.map((row) => (
-                <tr key={row.id}>
-                  <td style={tdStyle}>
-                    <Link to={`/projects/${row.id}`} style={{ color: theme.colors.text, textDecoration: 'none', fontFamily: theme.font.sans, fontWeight: theme.fontWeight.medium }}>
-                      {row.name}
-                    </Link>
-                  </td>
-                  <td style={tdStyle}>
-                    <StatusBadge status={row.status === 'active' ? 'active' : row.status === 'cloning' ? 'cloning' : 'idle'} />
-                  </td>
-                  <td style={tdStyle}>{row.pid ?? '—'}</td>
-                  <td style={tdStyle}>
-                    {row.expiresAt ? <CountdownTimer expiresAt={row.expiresAt} /> : '—'}
-                  </td>
-                  <td style={{ ...tdStyle, color: theme.colors.muted, fontSize: theme.fontSize.xs, maxWidth: '300px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {row.workspacePath}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <span style={{
+            fontFamily: theme.font.display, fontSize: '11px',
+            fontWeight: theme.fontWeight.bold, letterSpacing: '0.12em',
+            textTransform: 'uppercase', color: theme.colors.text,
+          }}>
+            Monitoring
+          </span>
+          {activeCount > 0 && (
+            <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+              <span style={{
+                width: '5px', height: '5px', borderRadius: '50%',
+                background: theme.colors.active,
+                boxShadow: `0 0 6px ${theme.colors.active}`,
+                animation: 'pulse-dot 2.5s infinite',
+              }} />
+              <span style={{ fontFamily: theme.font.mono, fontSize: '11px', color: theme.colors.active, fontWeight: theme.fontWeight.bold }}>
+                {activeCount}
+              </span>
+              <span style={{ fontFamily: theme.font.display, fontSize: '10px', color: theme.colors.textSecondary, letterSpacing: '0.06em' }}>
+                LIVE
+              </span>
+            </span>
+          )}
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <span style={{ fontFamily: theme.font.display, fontSize: '9px', color: theme.colors.muted, letterSpacing: '0.08em' }}>
+            AUTO-REFRESH 10S
+          </span>
+          <span style={{ fontFamily: theme.font.mono, fontSize: '10px', color: theme.colors.muted }}>
+            {lastRefresh.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+          </span>
+        </div>
       </div>
 
-      {/* Real-time events */}
-      <EventFeed />
+      {/* Main split: table + event feed */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: '1fr 300px',
+        border: `1px solid ${theme.colors.border}`,
+        background: theme.colors.surface,
+        minHeight: '400px',
+      }}>
+
+        {/* Projects table */}
+        <div style={{ borderRight: `1px solid ${theme.colors.border}`, display: 'flex', flexDirection: 'column' }}>
+          <PanelLabel
+            label={`Projects (${rows.length})`}
+            extra={
+              <span style={{ fontFamily: theme.font.mono, fontSize: '9px', color: loading ? theme.colors.warning : theme.colors.muted, letterSpacing: '0.06em', animation: loading ? 'pulse 1s infinite' : 'none' }}>
+                {loading ? 'REFRESHING' : 'LIVE'}
+              </span>
+            }
+          />
+          <TableHeaders />
+
+          {loading && rows.length === 0 ? (
+            <div style={{ padding: '16px 14px', fontFamily: theme.font.display, fontSize: '10px', color: theme.colors.muted, letterSpacing: '0.08em', animation: 'pulse 1.5s infinite' }}>
+              SCANNING…
+            </div>
+          ) : rows.length === 0 ? (
+            <div style={{ padding: '16px 14px', fontFamily: theme.font.display, fontSize: '10px', color: theme.colors.muted, letterSpacing: '0.08em' }}>
+              NO PROJECTS
+            </div>
+          ) : (
+            rows.map((row, i) => <ProjectRow key={row.id} row={row} idx={i} />)
+          )}
+        </div>
+
+        {/* Event feed */}
+        <div style={{ display: 'flex', flexDirection: 'column' }}>
+          <PanelLabel label="Event Feed" />
+          <div style={{ flex: 1, overflow: 'hidden' }}>
+            <EventFeed />
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

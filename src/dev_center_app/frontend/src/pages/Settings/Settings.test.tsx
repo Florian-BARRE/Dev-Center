@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+﻿import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import SettingsPage from './SettingsPage';
 
@@ -28,10 +28,10 @@ describe('SettingsPage', () => {
     expect(screen.getByText('Settings')).toBeTruthy();
   });
 
-  it('shows tab buttons', () => {
+  it('shows quick section buttons', () => {
     render(<SettingsPage />);
-    expect(screen.getByText('DEFAULTS')).toBeTruthy();
-    expect(screen.getByText('GLOBAL RULES')).toBeTruthy();
-    expect(screen.getByText('AUTH')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Defaults' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Global Rules' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Auth' })).toBeTruthy();
   });
 });

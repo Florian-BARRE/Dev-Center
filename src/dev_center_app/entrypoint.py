@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from loggerplusplus import loggerplusplus
+from loggerplusplus import formats as lpp_formats
 
 from config import RUNTIME_CONFIG                                # MUST be first
 from backend import CONTEXT, create_app
@@ -16,6 +17,7 @@ from libs.session_manager.session_manager import SessionManager
 from libs.git_manager.git_manager import GitManager
 from libs.auth_checker.auth_checker import AuthChecker
 from libs.scheduler.scheduler import SchedulerService
+from libs.log_broadcaster.log_broadcaster import LogBroadcaster
 
 
 def _build_app() -> FastAPI:
@@ -25,7 +27,14 @@ def _build_app() -> FastAPI:
     Returns:
         FastAPI: The fully configured application instance.
     """
-    # 1. Logger and config
+    # 1. Logger, config, and log broadcaster
+    # Register the broadcaster sink with the same format used by the console sink
+    # (defined in runtime_config.py) so the UI receives the same structured output
+    # the developer sees in the terminal — identifier, level, message included.
+    # colorize=False strips ANSI colour codes since the browser renders plain text.
+    CONTEXT.log_broadcaster = LogBroadcaster()
+    _fmt = getattr(lpp_formats, RUNTIME_CONFIG.LOGGING_LPP_FORMAT, lpp_formats.DebugFormat())()
+    loggerplusplus.add(CONTEXT.log_broadcaster.sink, format=_fmt, colorize=False)
     CONTEXT.logger = loggerplusplus.bind(identifier="DEV-CENTER")
     CONTEXT.RUNTIME_CONFIG = RUNTIME_CONFIG
 
@@ -43,7 +52,6 @@ def _build_app() -> FastAPI:
     CONTEXT.git_manager = GitManager(workspaces_dir=RUNTIME_CONFIG.WORKSPACES_DIR)
     CONTEXT.auth_checker = AuthChecker(
         claude_dir=RUNTIME_CONFIG.CLAUDE_DIR,
-        claude_json_path=RUNTIME_CONFIG.CLAUDE_DIR.parent / ".claude.json",
     )
     CONTEXT.scheduler = SchedulerService(
         state_manager=CONTEXT.state_manager,

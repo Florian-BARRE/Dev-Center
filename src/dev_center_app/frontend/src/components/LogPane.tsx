@@ -1,4 +1,4 @@
-// ====== Code Summary ======
+﻿// ====== Code Summary ======
 // Auto-scrolling log pane connected to a WebSocket endpoint.
 // Reconnects automatically using exponential backoff.
 
@@ -7,7 +7,7 @@ import theme from '../theme';
 import { wsUrl } from '../api/client';
 
 interface LogPaneProps {
-  wsPath: string;    // e.g. "/api/v1/projects/myproj/session/logs"
+  wsPath: string;    // e.g. "/api/projects/myproj/session/logs"
   maxLines?: number;
 }
 
@@ -94,7 +94,7 @@ export default function LogPane({ wsPath, maxLines = 500 }: LogPaneProps) {
           fontFamily: theme.font.mono,
           color: connected ? theme.colors.active : theme.colors.muted,
         }}>
-          {connected ? '● live' : '○ reconnecting…'}
+          {connected ? 'â— live' : 'â—‹ reconnectingâ€¦'}
         </span>
       </div>
 
@@ -110,7 +110,7 @@ export default function LogPane({ wsPath, maxLines = 500 }: LogPaneProps) {
         wordBreak: 'break-all',
       }}>
         {lines.length === 0 ? (
-          <span style={{ color: theme.colors.muted, fontStyle: 'italic' }}>No output yet…</span>
+          <span style={{ color: theme.colors.muted, fontStyle: 'italic' }}>No output yetâ€¦</span>
         ) : (
           lines.map((line, i) => (
             <div key={i}>{line}</div>
@@ -121,3 +121,4 @@ export default function LogPane({ wsPath, maxLines = 500 }: LogPaneProps) {
     </div>
   );
 }
+

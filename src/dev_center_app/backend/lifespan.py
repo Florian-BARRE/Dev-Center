@@ -9,7 +9,7 @@ from pyfiglet import Figlet
 from backend.context import CONTEXT
 
 # Total number of startup steps — update this when adding/removing steps.
-TOTAL_STEPS = 5
+TOTAL_STEPS = 6
 
 
 def log_step(step: int, msg: str) -> None:
@@ -62,11 +62,15 @@ def lifespan() -> Any:
                 CONTEXT.RUNTIME_CONFIG.RENEW_THRESHOLD_MINUTES
             )
 
-            # 5. Start scheduler
-            log_step(4, "Scheduler")
+            # 5. Recover sessions that were active before restart
+            log_step(4, "Session recovery")
+            await CONTEXT.session_manager.recover_sessions()
+
+            # 6. Start scheduler
+            log_step(5, "Scheduler")
             CONTEXT.scheduler_task = await CONTEXT.scheduler.start()
 
-            log_step(5, "Ready")
+            log_step(6, "Ready")
             yield
 
         finally:

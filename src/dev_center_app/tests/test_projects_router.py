@@ -1,4 +1,4 @@
-# tests/test_projects_router.py
+﻿# tests/test_projects_router.py
 # Integration tests for the /projects router using a real FastAPI app instance
 # with CONTEXT wired to temporary directories and a no-op lifespan.
 
@@ -22,7 +22,7 @@ import backend.routers.projects.router as _projects_router_module
 
 def _build_test_app() -> FastAPI:
     """
-    Build a minimal FastAPI app for testing — no lifespan, just the routers.
+    Build a minimal FastAPI app for testing â€” no lifespan, just the routers.
 
     Returns:
         FastAPI: App with health and projects routers registered.
@@ -30,11 +30,11 @@ def _build_test_app() -> FastAPI:
 
     @asynccontextmanager
     async def _null_lifespan(app):
-        """No-op lifespan — skips service startup for tests."""
+        """No-op lifespan â€” skips service startup for tests."""
         yield
 
     app = FastAPI(title="test", lifespan=_null_lifespan)
-    prefix = "/api/v1"
+    prefix = "/api"
     app.include_router(health_router, prefix=prefix)
     app.include_router(projects_router, prefix=prefix)
     return app
@@ -67,7 +67,7 @@ async def client(tmp_data, tmp_path):
 @pytest.mark.asyncio
 async def test_list_projects_empty(client):
     """GET /projects returns an empty list when no projects exist."""
-    resp = await client.get("/api/v1/projects")
+    resp = await client.get("/api/projects")
     assert resp.status_code == 200
     assert resp.json()["projects"] == []
 
@@ -82,7 +82,7 @@ async def test_create_project_returns_202(client):
         yield "Cloning into directory..."
 
     with patch.object(CONTEXT.git_manager, "clone", side_effect=fake_clone):
-        resp = await client.post("/api/v1/projects", json={
+        resp = await client.post("/api/projects", json={
             "repoUrl": "https://github.com/user/patrimonium",
         })
 
@@ -100,7 +100,7 @@ async def test_create_project_derives_id_from_url(client):
         yield "Cloning..."
 
     with patch.object(CONTEXT.git_manager, "clone", side_effect=fake_clone):
-        resp = await client.post("/api/v1/projects", json={
+        resp = await client.post("/api/projects", json={
             "repoUrl": "https://github.com/user/My_Repo.git",
         })
 
@@ -119,7 +119,7 @@ async def test_get_project(client):
         workspace_path="/w/myrepo",
     ))
 
-    resp = await client.get("/api/v1/projects/myrepo")
+    resp = await client.get("/api/projects/myrepo")
     assert resp.status_code == 200
     assert resp.json()["id"] == "myrepo"
     assert resp.json()["status"] == "ready"
@@ -128,7 +128,7 @@ async def test_get_project(client):
 @pytest.mark.asyncio
 async def test_get_project_not_found(client):
     """GET /projects/{id} returns 404 when the project does not exist."""
-    resp = await client.get("/api/v1/projects/nonexistent")
+    resp = await client.get("/api/projects/nonexistent")
     assert resp.status_code == 404
 
 
@@ -142,7 +142,7 @@ async def test_update_project_model(client):
         workspace_path="/w/my-proj",
     ))
 
-    resp = await client.put("/api/v1/projects/my-proj", json={"model": "claude-opus-4"})
+    resp = await client.put("/api/projects/my-proj", json={"model": "claude-opus-4"})
     assert resp.status_code == 200
     assert resp.json()["model"] == "claude-opus-4"
 
@@ -150,7 +150,7 @@ async def test_update_project_model(client):
 @pytest.mark.asyncio
 async def test_update_project_not_found(client):
     """PUT /projects/{id} returns 404 when the project does not exist."""
-    resp = await client.put("/api/v1/projects/nope", json={"model": "claude-opus-4"})
+    resp = await client.put("/api/projects/nope", json={"model": "claude-opus-4"})
     assert resp.status_code == 404
 
 
@@ -165,7 +165,7 @@ async def test_delete_project(client):
     ))
 
     with patch.object(CONTEXT.git_manager, "cleanup") as mock_cleanup:
-        resp = await client.delete("/api/v1/projects/to-delete")
+        resp = await client.delete("/api/projects/to-delete")
 
     assert resp.status_code == 204
     assert CONTEXT.state_manager.get_project("to-delete") is None
@@ -174,8 +174,8 @@ async def test_delete_project(client):
 
 @pytest.mark.asyncio
 async def test_delete_nonexistent_project_is_idempotent(client):
-    """DELETE /projects/{id} is idempotent — no error when project does not exist."""
-    resp = await client.delete("/api/v1/projects/ghost")
+    """DELETE /projects/{id} is idempotent â€” no error when project does not exist."""
+    resp = await client.delete("/api/projects/ghost")
     assert resp.status_code == 204
 
 
@@ -189,7 +189,8 @@ async def test_list_projects_after_insert(client):
             workspace_path=f"/w/{slug}",
         ))
 
-    resp = await client.get("/api/v1/projects")
+    resp = await client.get("/api/projects")
     assert resp.status_code == 200
     ids = {p["id"] for p in resp.json()["projects"]}
     assert ids == {"alpha", "beta", "gamma"}
+

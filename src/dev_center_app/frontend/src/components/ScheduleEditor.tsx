@@ -37,12 +37,13 @@ export default function ScheduleEditor({ value, onChange }: ScheduleEditorProps)
     background: theme.colors.bg,
     color: theme.colors.text,
     border: `1px solid ${theme.colors.border}`,
-    borderRadius: theme.radius.sm,
-    padding: '4px 8px',
+    borderRadius: theme.radius.md,
+    padding: '5px 10px',
     fontSize: theme.fontSize.sm,
     fontFamily: theme.font.mono,
-    width: '80px',
+    width: '84px',
     outline: 'none',
+    transition: 'border-color 0.15s',
   };
 
   return (
@@ -80,14 +81,17 @@ export default function ScheduleEditor({ value, onChange }: ScheduleEditorProps)
               onClick={addRange}
               style={{
                 alignSelf: 'flex-start',
-                background: 'none',
-                border: `1px solid ${theme.colors.border}`,
-                borderRadius: theme.radius.sm,
-                color: theme.colors.textSecondary,
+                background: theme.colors.accentGlow,
+                border: `1px solid ${theme.colors.accent}30`,
+                borderRadius: theme.radius.md,
+                color: theme.colors.accent,
                 cursor: 'pointer',
-                fontSize: theme.fontSize.sm,
+                fontSize: theme.fontSize.xs,
                 fontFamily: theme.font.sans,
+                fontWeight: theme.fontWeight.semibold,
                 padding: '3px 10px',
+                letterSpacing: '0.04em',
+                transition: 'all 0.15s',
               }}
             >
               + Add range

@@ -1,7 +1,7 @@
-import { apiFetch } from './client';
+﻿import { apiFetch } from './client';
 import type { SessionResponse } from './types';
 
-const BASE = '/api/v1';
+const BASE = '/api';
 
 export async function startSession(projectId: string): Promise<SessionResponse> {
   return apiFetch<SessionResponse>(`${BASE}/projects/${projectId}/session/start`, {
@@ -18,3 +18,4 @@ export async function renewSession(projectId: string): Promise<SessionResponse> 
     method: 'POST',
   });
 }
+

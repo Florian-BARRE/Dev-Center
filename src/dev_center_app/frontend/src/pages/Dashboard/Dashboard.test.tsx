@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+﻿import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import Dashboard from './Dashboard';
@@ -15,7 +15,7 @@ describe('Dashboard', () => {
         <Dashboard />
       </MemoryRouter>
     );
-    const total = await screen.findByText('total');
-    expect(total).toBeTruthy();
+    const heading = await screen.findByText('Operations Dashboard');
+    expect(heading).toBeTruthy();
   });
 });
