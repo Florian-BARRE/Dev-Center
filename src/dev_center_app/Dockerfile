@@ -76,7 +76,11 @@ FROM python:3.12-slim-bookworm AS runtime
 # - PATH: make the uv-built venv the active Python environment.
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PATH="/opt/venv/bin:${PATH}"
+    PATH="/opt/venv/bin:${PATH}" \
+    # Add the app source root to Python's module search path so that absolute
+    # imports (from config, from backend, from libs.*) resolve correctly when
+    # uvicorn is invoked as `uvicorn dev_center_app.entrypoint:app` from /app.
+    PYTHONPATH="/app/dev_center_app"
 
 # Install runtime system dependencies:
 # - git: required by the git clone feature.
