@@ -4,6 +4,7 @@
 import pathlib
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from loggerplusplus import loggerplusplus
 
@@ -65,9 +66,48 @@ def _build_app() -> FastAPI:
     )
 
     # 5. Frontend static files (served after build; skip gracefully if dist not present)
+    #
+    # Do NOT use mount("/", StaticFiles(html=True)) — Starlette's Mount does
+    # prefix matching on ALL scope types including "websocket", so it would
+    # intercept WebSocket upgrade requests and raise AssertionError.
+    #
+    # Instead: mount /assets for Vite build artefacts, then add an explicit
+    # HTTP-only catch-all GET route that serves index.html for SPA routing.
+    # HTTP GET routes are never matched for WebSocket connections.
     dist = RUNTIME_CONFIG.PATH_ROOT_DIR / "frontend" / "dist"
     if dist.exists():
-        fastapi_app.mount("/", StaticFiles(directory=str(dist), html=True), name="static")
+        assets_dir = dist / "assets"
+        if assets_dir.exists():
+            fastapi_app.mount(
+                "/assets",
+                StaticFiles(directory=str(assets_dir)),
+                name="assets",
+            )
+
+        index_html = str(dist / "index.html")
+
+        @fastapi_app.get("/{full_path:path}", include_in_schema=False)
+        async def spa_fallback(full_path: str = "") -> FileResponse:
+            """
+            SPA catch-all — serve index.html for any unmatched GET path.
+
+            Static files that exist in dist (e.g. favicon.ico) are served
+            directly; all other paths fall back to index.html so that React
+            Router handles client-side navigation.
+
+            Args:
+                full_path (str): The unmatched URL path segment.
+
+            Returns:
+                FileResponse: The requested static file or index.html.
+            """
+            # 1. Try to serve an exact file from the dist root
+            requested = dist / full_path
+            if full_path and requested.is_file():
+                return FileResponse(str(requested))
+
+            # 2. Fall back to index.html for SPA client-side routing
+            return FileResponse(index_html)
 
     return fastapi_app
 

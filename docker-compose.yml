@@ -31,12 +31,17 @@ services:
       - ~/.claude:/home/app/.claude
       - ~/.claude.json:/home/app/.claude.json
       # SSH key for git clone operations (optional; defaults to ~/.ssh).
-      - ${SSH_KEY_PATH:-~/.ssh}:/home/app/.ssh:ro
+      # Mounted at /root/.ssh so git finds keys when HOME=/root.
+      - ${SSH_KEY_PATH:-~/.ssh}:/root/.ssh:ro
       # Docker socket — gives Claude Code sessions access to the host Docker
       # daemon so they can spawn containers (docker run, docker compose, etc.).
       # Security note: access to this socket is equivalent to root on the host.
       - /var/run/docker.sock:/var/run/docker.sock
     environment:
+      # Override HOME to a clean Linux path.
+      # Docker Desktop on Windows injects HOME=/c/Users/<user> (Git Bash format)
+      # which breaks git path resolution and credential prompts inside the container.
+      - HOME=/root
       # Path configuration injected at runtime.
       - DATA_DIR=/data
       - WORKSPACES_DIR=/workspaces

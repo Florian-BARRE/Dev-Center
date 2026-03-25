@@ -89,6 +89,14 @@ class GitManager(LoggerClass):
             "git", "clone", "--progress", repo_url, str(dest),
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.STDOUT,
+            env={
+                # Inherit all current env vars so PATH and HOME are preserved.
+                **__import__("os").environ,
+                # Disable interactive credential prompts — fail fast on private
+                # repos instead of blocking the subprocess waiting for a TTY.
+                "GIT_TERMINAL_PROMPT": "0",
+                "GIT_ASKPASS": "echo",
+            },
         )
 
         async for raw_line in proc.stdout:
