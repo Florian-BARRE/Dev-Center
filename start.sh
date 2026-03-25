@@ -70,7 +70,9 @@ source services/common/.env
 
 [ -z "${DATA_ROOT:-}" ] && err "DATA_ROOT is not set in services/common/.env"
 
-log "  DATA_ROOT = ${DATA_ROOT}"
+log "  DATA_ROOT        = ${DATA_ROOT}"
+log "  DEV_CENTER_PORT  = ${DEV_CENTER_PORT:-8000}"
+log "  CODE_SERVER_PORT = ${CODE_SERVER_PORT:-8443}"
 
 # ─────────────────────────────────────────────────────────────
 # Step 3 — Validate DATA_ROOT (Windows path safety checks)
@@ -94,8 +96,6 @@ log "  DATA_ROOT = ${DATA_ROOT}"
 # ─────────────────────────────────────────────────────────────
 if [[ "$OSTYPE" == "msys"* ]] || [[ "$OSTYPE" == "mingw"* ]] || [[ "$OSTYPE" == "cygwin"* ]]; then
     ABS_DATA_ROOT=$(realpath -m "${DATA_ROOT}" 2>/dev/null || echo "${PWD}/${DATA_ROOT#./}")
-
-    # Convert POSIX path to Windows-style backslash path for escape-sequence detection.
     WIN_PATH=$(echo "$ABS_DATA_ROOT" | sed 's|/|\\|g')
 
     BAD_PATH=false
@@ -127,37 +127,120 @@ mkdir -p \
 log "  [OK] Data directories ready."
 
 # ─────────────────────────────────────────────────────────────
-# Step 4 — Check host auth credentials
+# Step 4 — Check Claude Code authentication
+#
+# Validates ~/.claude/.credentials.json (OAuth token + expiry) or
+# ~/.claude.json (legacy token). Sessions won't work without this.
 # ─────────────────────────────────────────────────────────────
-log "Checking host auth credentials ..."
+log "Checking Claude Code authentication ..."
 
-# Claude Code (~/.claude) — required for claude remote-control sessions.
-if [ -d "$HOME/.claude" ]; then
-    log "  [OK] ~/.claude found — Claude Code auth available."
-else
-    warn "  [--] ~/.claude not found — Claude Code sessions will not work."
-    warn "       Run 'claude' on the host to authenticate before starting sessions."
-fi
+CLAUDE_DIR="$HOME/.claude"
+CLAUDE_CREDS="$CLAUDE_DIR/.credentials.json"
+CLAUDE_JSON_FILE="$HOME/.claude.json"
+CLAUDE_OK=false
 
-# SSH key (~/.ssh/id_*) — required for git clone/push via SSH.
-if ls "$HOME/.ssh"/id_* > /dev/null 2>&1; then
-    log "  [OK] SSH key found — git clone via SSH available."
-    # Pre-populate GitHub in known_hosts so git clone never prompts inside containers.
-    if ! grep -q "github.com" "$HOME/.ssh/known_hosts" 2>/dev/null; then
-        log "       Adding GitHub to ~/.ssh/known_hosts ..."
-        ssh-keyscan github.com >> "$HOME/.ssh/known_hosts" 2>/dev/null
+if [ -f "$CLAUDE_CREDS" ]; then
+    if grep -q '"accessToken"' "$CLAUDE_CREDS" 2>/dev/null; then
+        # Check token expiry if possible (expiresAt is milliseconds since epoch).
+        EXPIRES=$(grep -o '"expiresAt":[0-9]*' "$CLAUDE_CREDS" 2>/dev/null \
+                  | grep -o '[0-9]*$' || echo "0")
+        NOW_MS=$(( $(date +%s) * 1000 ))
+        if [ "${EXPIRES:-0}" -gt "$NOW_MS" ] 2>/dev/null; then
+            CLAUDE_OK=true
+            log "  [OK] Claude credentials valid (.credentials.json)."
+        else
+            warn "  [!!] Claude OAuth token has EXPIRED."
+            warn "       Use the Settings > Auth tab in the app to re-authenticate,"
+            warn "       or run 'claude' on the host first."
+        fi
+    else
+        warn "  [!!] ~/.claude/.credentials.json exists but has no accessToken."
+    fi
+elif [ -f "$CLAUDE_JSON_FILE" ]; then
+    if grep -qE '"oauthToken"|"accessToken"' "$CLAUDE_JSON_FILE" 2>/dev/null; then
+        CLAUDE_OK=true
+        log "  [OK] Claude credentials found (~/.claude.json legacy format)."
+    else
+        warn "  [!!] ~/.claude.json exists but contains no token."
     fi
 else
-    warn "  [--] No SSH key found in ~/.ssh/ — git clone via SSH will not work."
-    warn "       Generate one: ssh-keygen -t ed25519 -C 'your@email.com'"
+    CLAUDE_OK=false
+fi
+
+if [ "$CLAUDE_OK" = false ]; then
+    warn "  [!!] Claude authentication not found — sessions will NOT work."
+    warn "       Run 'claude' on the host to authenticate, then re-run ./start.sh."
+    warn "       You can also use Settings > Auth in the app once it is running."
 fi
 
 # ─────────────────────────────────────────────────────────────
-# Step 5 — Build and start Docker Compose
+# Step 5 — Check SSH key for private repo cloning
 #
-# --build: rebuilds dev-center-app if source code changed since last run.
-# --env-file: injects DATA_ROOT and port vars for volume interpolation.
-# In dev mode: overlays docker-compose.dev.yml for source mounts + hot reload.
+# Resolves SSH_KEY_PATH from services/common/.env (defaults to ~/.ssh).
+# If a key exists, pre-seeds GitHub into known_hosts so git clone
+# never prompts inside the container.
+# ─────────────────────────────────────────────────────────────
+log "Checking SSH key ..."
+
+SSH_DIR="${SSH_KEY_PATH:-$HOME/.ssh}"
+# Strip trailing slash and resolve ~ if needed
+SSH_DIR="${SSH_DIR%/}"
+[[ "$SSH_DIR" == "~"* ]] && SSH_DIR="$HOME${SSH_DIR:1}"
+
+SSH_KEY_FILE=""
+for candidate in \
+        "$SSH_DIR/id_ed25519" \
+        "$SSH_DIR/id_rsa" \
+        "$SSH_DIR/id_ecdsa" \
+        "$SSH_DIR/id_dsa"; do
+    if [ -f "$candidate" ]; then
+        SSH_KEY_FILE="$candidate"
+        break
+    fi
+done
+
+if [ -n "$SSH_KEY_FILE" ]; then
+    log "  [OK] SSH key found: $SSH_KEY_FILE"
+    log "       Private repos via SSH (git@github.com:...) will work."
+
+    # Pre-seed GitHub in known_hosts on the host so the container inherits it.
+    KNOWN_HOSTS="$SSH_DIR/known_hosts"
+    if ! grep -q "github.com" "$KNOWN_HOSTS" 2>/dev/null; then
+        log "       Adding GitHub to $KNOWN_HOSTS ..."
+        if ssh-keyscan -H github.com >> "$KNOWN_HOSTS" 2>/dev/null; then
+            log "       [OK] github.com added to known_hosts."
+        else
+            warn "       ssh-keyscan failed — run manually:"
+            warn "       ssh-keyscan -H github.com >> $KNOWN_HOSTS"
+        fi
+    else
+        log "       GitHub already in known_hosts."
+    fi
+else
+    warn "  [--] No SSH key found in ${SSH_DIR}."
+    warn "       Private repo clones via SSH (git@github.com:...) will NOT work."
+    if [ -n "${SSH_KEY_PATH:-}" ]; then
+        warn "       SSH_KEY_PATH is set to '${SSH_KEY_PATH}' but no key file found there."
+        warn "       Check the path is correct in services/common/.env."
+    else
+        warn "       Generate one: ssh-keygen -t ed25519 -C 'your@email.com'"
+        warn "       Then re-run ./start.sh to add GitHub to known_hosts."
+    fi
+    warn "       HTTPS public repos will still work without an SSH key."
+fi
+
+# ─────────────────────────────────────────────────────────────
+# Step 6 — Summary of readiness before starting
+# ─────────────────────────────────────────────────────────────
+echo ""
+log "Pre-flight summary:"
+log "  Claude auth    : $( [ "$CLAUDE_OK" = true ] && echo 'OK' || echo 'MISSING — sessions will fail')"
+log "  SSH key        : $( [ -n "$SSH_KEY_FILE" ] && echo "OK ($SSH_KEY_FILE)" || echo 'MISSING — SSH clone unavailable')"
+log "  Data root      : ${DATA_ROOT}"
+echo ""
+
+# ─────────────────────────────────────────────────────────────
+# Step 7 — Build and start Docker Compose
 # ─────────────────────────────────────────────────────────────
 if [ "$DEV_MODE" = true ]; then
     log "Starting in DEV mode (source mounts + hot reload) ..."
@@ -171,9 +254,7 @@ log "Building and starting containers ..."
 $COMPOSE_CMD up -d --build
 
 # ─────────────────────────────────────────────────────────────
-# Step 6 — Wait for dev-center-app to become healthy
-#
-# Polls /api/v1/health every 3 s for up to 90 s.
+# Step 8 — Wait for dev-center-app to become healthy
 # ─────────────────────────────────────────────────────────────
 log "Waiting for dev-center-app to become healthy ..."
 APP_PORT="${DEV_CENTER_PORT:-8000}"
@@ -191,9 +272,12 @@ done
 # ─────────────────────────────────────────────────────────────
 # Done
 # ─────────────────────────────────────────────────────────────
-log ""
+echo ""
 log "Dev Center is running!"
 log "   Dev Center App : http://localhost:${DEV_CENTER_PORT:-8000}"
 log "   VS Code Server : http://localhost:${CODE_SERVER_PORT:-8443}"
-log ""
-log "Open the dashboard to add projects and manage Claude Code sessions."
+echo ""
+if [ "$CLAUDE_OK" = false ]; then
+    warn "ACTION REQUIRED: Claude is not authenticated."
+    warn "  Open http://localhost:${DEV_CENTER_PORT:-8000} → Settings → Auth → Re-authenticate"
+fi

@@ -89,7 +89,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 #   on the host daemon via the mounted /var/run/docker.sock socket.
 # Clean up apt cache to keep the image minimal.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends git curl ca-certificates gnupg \
+    && apt-get install -y --no-install-recommends git openssh-client curl ca-certificates gnupg \
     && install -m 0755 -d /etc/apt/keyrings \
     && curl -fsSL https://download.docker.com/linux/debian/gpg \
        -o /etc/apt/keyrings/docker.asc \
@@ -124,8 +124,17 @@ COPY --from=ui-build /usr/local/lib/node_modules/@anthropic-ai/claude-code \
                      /usr/local/lib/node_modules/@anthropic-ai/claude-code
 COPY --from=ui-build /usr/local/bin/claude /usr/local/bin/claude
 
+# Copy the startup entrypoint script.
+# This script fixes SSH key permissions at container start (Windows Docker mounts
+# deliver keys with 0777 which OpenSSH rejects) and then exec's uvicorn.
+COPY dev_center_app/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+
 EXPOSE 8000
 
-# Start the FastAPI application via uvicorn.
+# Use the entrypoint script to fix SSH permissions before launching uvicorn.
+ENTRYPOINT ["docker-entrypoint.sh"]
+
+# Default command passed to the entrypoint — start the FastAPI app via uvicorn.
 # The entrypoint.py module exposes the FastAPI `app` object.
 CMD ["uvicorn", "dev_center_app.entrypoint:app", "--host", "0.0.0.0", "--port", "8000"]
