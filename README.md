@@ -138,6 +138,7 @@ docker compose --env-file services/common/.env -f docker-compose.yml -f docker-c
 |  |  +-------------------------- code-server -------------------------+  |  |
 |  |  | Browser IDE for /workspaces                                    |  |  |
 |  |  | Port: CODE_SERVER_PORT                                         |  |  |
+|  |  | Bind: 0.0.0.0:8080 (published to host CODE_SERVER_PORT)        |  |  |
 |  |  | Auth mode: PASSWORD empty -> none, PASSWORD set -> password    |  |  |
 |  |  +----------------------------------------------------------------+  |  |
 |  +----------------------------------------------------------------------+  |

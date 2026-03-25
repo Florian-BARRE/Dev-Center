@@ -83,8 +83,9 @@ services:
       - ${DATA_ROOT}/workspaces:/workspaces
 
     # If PASSWORD is set, require password auth. If empty, disable auth.
+    # Always bind on 0.0.0.0 so the published host port is reachable externally.
     entrypoint: ["/bin/sh", "-c"]
-    command: ['if [ -n "$$PASSWORD" ]; then exec code-server --auth password /workspaces; else exec code-server --auth none /workspaces; fi']
+    command: ['if [ -n "$$PASSWORD" ]; then exec code-server --bind-addr 0.0.0.0:8080 --auth password /workspaces; else exec code-server --bind-addr 0.0.0.0:8080 --auth none /workspaces; fi']
 
     networks:
       - dev-center-net
