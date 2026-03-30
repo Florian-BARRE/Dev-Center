@@ -1,35 +1,11 @@
-# Python
-__pycache__/
-*.py[cod]
-*.pyo
-*.pyd
-.venv/
-*.egg-info/
-dist/
-build/
-
-# Node
-node_modules/
-
-# Logs
-*.log
-
-# Environment files
+# Environment
 .env
-*.env
-
-# Dev data directory (local runtime data — not committed)
-dev_data/
-
-# Service .env files contain secrets — only .env.example files are committed
-services/**/.env
 
 # OS
 .DS_Store
 Thumbs.db
 
-# IDE Jetbrain
-.idea
-
-# Git worktrees
-.worktrees/
+# IDE
+.idea/
+.vscode/
+*.swp

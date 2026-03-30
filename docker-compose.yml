@@ -1,95 +1,22 @@
-# Production Docker Compose for Dev Center.
-#
-# Usage:
-#   1) Copy env examples and fill required values:
-#      cp services/common/.env.example services/common/.env
-#      cp services/dev-center-app/.env.example services/dev-center-app/.env
-#      cp services/vscode/.env.example services/vscode/.env
-#   2) Start production stack:
-#      docker compose --env-file services/common/.env up -d --build
-#
-# Production exposes two services:
-# - dev-center-app: FastAPI backend that also serves the built frontend bundle.
-# - code-server: optional browser IDE for mounted project workspaces.
-
 services:
-  dev-center-app:
-    # Stable container name keeps logs and debugging commands predictable.
-    container_name: dev-center-backend
-    build:
-      # Build from src/ to keep Docker paths explicit and short.
-      context: ./src
-      dockerfile: dev_center_app/Dockerfile
-      # Use the production target that includes built frontend assets.
-      target: runtime
-    image: dev-center-backend:latest
-    restart: unless-stopped
-
-    # Backend API and built frontend are served on the same HTTP port.
-    ports:
-      - "${DEV_CENTER_PORT:-8000}:8000"
-
-    # Backend-only runtime variables.
-    env_file:
-      - ./services/dev-center-app/.env
+  vscode:
+    image: lscr.io/linuxserver/code-server:latest
+    container_name: dev-center-vscode
     environment:
-      # Internal paths consumed by runtime_config.py.
-      DATA_DIR: /data
-      WORKSPACES_DIR: /workspaces
-      CLAUDE_DIR: /root/.claude
-
-    # Host mounts that must persist across container restarts.
+      # UID/GID of the user that owns the workspace on the host.
+      # Run `id -u` and `id -g` to get your values (default: 1000/1000).
+      - PUID=1000
+      - PGID=1000
+      # Timezone for the container clock.
+      - TZ=${VSCODE_TZ:-Europe/Paris}
+      # Password to access VS Code in the browser.
+      - PASSWORD=${VSCODE_PASSWORD}
+      # Directory opened by default when VS Code starts.
+      - DEFAULT_WORKSPACE=/workspace
     volumes:
-      # Project repositories cloned by the app.
-      - ${DATA_ROOT}/workspaces:/workspaces
-      # App state (projects.json, settings.json, schedules, shared rules).
-      - ${DATA_ROOT}/data:/data
-      # Claude credentials from the host machine.
-      - ${CLAUDE_HOST_DIR:-~/.claude}:/root/.claude
-      # Claude global config/trust file persisted from host.
-      - ${CLAUDE_JSON_HOST_PATH:-~/.claude.json}:/root/.claude.json
-      # SSH keys for private git access (read-only by design).
-      - ${SSH_KEY_PATH:-~/.ssh}:/root/.ssh:ro
-      # Host Docker socket so Claude Code can create project containers.
-      - /var/run/docker.sock:/var/run/docker.sock
-
-    # Health endpoint used by start.sh and orchestration checks.
-    healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=2)"]
-      interval: 30s
-      timeout: 5s
-      retries: 5
-      start_period: 20s
-
-    networks:
-      - dev-center-net
-
-  code-server:
-    # Browser IDE to inspect/edit repositories mounted in /workspaces.
-    container_name: dev-center-code-server
-    image: codercom/code-server:latest
-    restart: unless-stopped
-
-    # Host port for VS Code in browser.
+      # Mount the host workspace directory into the container.
+      - ${WORKSPACE_DIR}:/workspace
     ports:
-      - "${CODE_SERVER_PORT:-8443}:8080"
-
-    # Service-scoped env for password/no-password auth mode.
-    env_file:
-      - ./services/vscode/.env
-
-    # Share the same workspace root used by dev-center-app.
-    volumes:
-      - ${DATA_ROOT}/workspaces:/workspaces
-
-    # If PASSWORD is set, require password auth. If empty, disable auth.
-    # Always bind on 0.0.0.0 so the published host port is reachable externally.
-    entrypoint: ["/bin/sh", "-c"]
-    command: ['if [ -n "$$PASSWORD" ]; then exec code-server --bind-addr 0.0.0.0:8080 --auth password /workspaces; else exec code-server --bind-addr 0.0.0.0:8080 --auth none /workspaces; fi']
-
-    networks:
-      - dev-center-net
-
-networks:
-  dev-center-net:
-    driver: bridge
+      # Expose VS Code Server on the configured host port.
+      - "${VSCODE_PORT:-8443}:8443"
+    restart: unless-stopped

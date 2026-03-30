@@ -1,8 +1,0 @@
-# Force LF line endings for files that run inside Linux containers.
-# Without this, Git on Windows checks out these files with CRLF,
-# which breaks shebang lines (bash\r not found) in Linux containers.
-
-*.sh        text eol=lf
-*.py        text eol=lf
-Dockerfile  text eol=lf
-*.dockerfile text eol=lf
