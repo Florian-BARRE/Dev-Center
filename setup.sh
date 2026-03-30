@@ -57,6 +57,17 @@ ask_no() {
 # Check if a command is available.
 has() { command -v "$1" &>/dev/null; }
 
+# Run a docker command, prefixing with sudo if the current shell session
+# does not yet have the docker group active (e.g. right after usermod).
+# This is the common case for a non-root sudo user on first install.
+dk() {
+    if groups 2>/dev/null | grep -qw docker; then
+        docker "$@"
+    else
+        sudo docker "$@"
+    fi
+}
+
 # ── Parse flags ───────────────────────────────────────────────────────────────
 SKIP_CLAUDE=false
 SKIP_CODEX=false
@@ -159,13 +170,11 @@ else
 fi
 
 # Docker Compose (v2 plugin).
-if docker compose version &>/dev/null 2>&1; then
-    COMPOSE_VER=$(docker compose version --short 2>/dev/null || echo "v2")
+if dk compose version &>/dev/null 2>&1; then
+    COMPOSE_VER=$(dk compose version --short 2>/dev/null || echo "v2")
     ok "Docker Compose plugin ${COMPOSE_VER} already installed."
 elif has docker-compose; then
     ok "docker-compose (standalone v1) found — will use it."
-    # Alias so 'docker compose' works throughout the rest of this script.
-    docker() { if [ "$1" = "compose" ]; then shift; docker-compose "$@"; else command docker "$@"; fi; }
 else
     warn "Docker Compose not found — installing ..."
     case "$PKG" in
@@ -190,13 +199,13 @@ else
 fi
 
 # Ensure Docker daemon is running.
-if ! docker info &>/dev/null 2>&1; then
+if ! dk info &>/dev/null 2>&1; then
     warn "Docker daemon not running — starting ..."
     sudo systemctl start docker 2>/dev/null \
         || sudo service docker start 2>/dev/null \
         || err "Could not start Docker daemon. Run: sudo systemctl start docker"
     sleep 2
-    docker info &>/dev/null 2>&1 \
+    dk info &>/dev/null 2>&1 \
         || err "Docker daemon still not responding after start attempt."
 fi
 ok "Docker daemon is running."
@@ -434,8 +443,15 @@ if [ "${VSCODE_PASSWORD}" = "changeme" ]; then
     warn "VSCODE_PASSWORD is still set to 'changeme' — consider changing it in .env."
 fi
 
-mkdir -p "${WORKSPACE_DIR}"
-ok "Workspace directory: ${WORKSPACE_DIR}"
+# Create WORKSPACE_DIR — may require sudo if it is under /srv, /opt, etc.
+if mkdir -p "${WORKSPACE_DIR}" 2>/dev/null; then
+    ok "Workspace directory: ${WORKSPACE_DIR}"
+else
+    log "Creating ${WORKSPACE_DIR} with sudo (directory requires elevated permissions) ..."
+    sudo mkdir -p "${WORKSPACE_DIR}"
+    sudo chown "$USER:$USER" "${WORKSPACE_DIR}"
+    ok "Workspace directory: ${WORKSPACE_DIR} (ownership set to $USER)"
+fi
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Step 7 — Launch VS Code Server
@@ -445,10 +461,10 @@ section "VS Code Server"
 PORT="${VSCODE_PORT:-8443}"
 
 log "Pulling latest image ..."
-docker compose pull --quiet
+dk compose pull --quiet
 
 log "Starting container ..."
-docker compose up -d
+dk compose up -d
 
 # Wait up to 40 s for the server to respond.
 log "Waiting for VS Code Server on port ${PORT} ..."
