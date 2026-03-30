@@ -1,32 +1,61 @@
 #!/usr/bin/env bash
 # Dev Center — Machine setup script.
 #
-# Verifies and installs all required tools on the current machine.
-# Safe to run multiple times: each step is idempotent.
+# Installs and configures all required tools on the current machine,
+# then launches VS Code Server.
+#
+# Safe to re-run at any time: every step is idempotent.
 #
 # Usage:
-#   ./setup.sh                        interactive (asks for each optional tool)
-#   ./setup.sh --skip-claude          skip Claude CLI setup
-#   ./setup.sh --skip-codex           skip Codex CLI setup
-#   ./setup.sh --skip-ssh             skip SSH key setup
-#   ./setup.sh --skip-claude --skip-codex   combine flags freely
+#   ./setup.sh                          interactive (recommended)
+#   ./setup.sh --skip-claude            skip Claude CLI
+#   ./setup.sh --skip-codex             skip Codex CLI
+#   ./setup.sh --skip-ssh               skip SSH key setup
+#   ./setup.sh --skip-claude --skip-codex --skip-ssh
 
 set -euo pipefail
 
-# ── Colors ────────────────────────────────────────────────────────────────────
+# ── Colors & helpers ──────────────────────────────────────────────────────────
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 RED='\033[0;31m'
 CYAN='\033[0;36m'
 BOLD='\033[1m'
+DIM='\033[2m'
 NC='\033[0m'
 
 log()     { echo -e "${GREEN}[SETUP]${NC} $1"; }
 warn()    { echo -e "${YELLOW}[WARN]${NC}  $1"; }
 err()     { echo -e "${RED}[ERR]${NC}   $1"; exit 1; }
-section() { echo -e "\n${CYAN}${BOLD}━━━ $1 ━━━${NC}"; }
-ok()      { echo -e "  ${GREEN}✓${NC} $1"; }
-skip()    { echo -e "  ${YELLOW}–${NC} $1 (skipped)"; }
+info()    { echo -e "  ${DIM}$1${NC}"; }
+section() { echo -e "\n${CYAN}${BOLD}━━━  $1  ━━━${NC}"; }
+ok()      { echo -e "  ${GREEN}✓${NC}  $1"; }
+skip()    { echo -e "  ${YELLOW}–${NC}  $1 ${DIM}(skipped)${NC}"; }
+bullet()  { echo -e "  ${CYAN}·${NC}  $1"; }
+
+# Read a yes/no answer from the terminal (not stdin, to survive piped installs).
+# Returns 0 for yes, 1 for no. Default is yes.
+ask() {
+    local prompt="$1"
+    local answer
+    echo -en "\n  ${YELLOW}?${NC}  ${BOLD}${prompt}${NC} ${DIM}[Y/n]${NC} "
+    read -r answer </dev/tty
+    echo ""
+    [[ "$answer" =~ ^[Nn] ]] && return 1 || return 0
+}
+
+# Same but default is no.
+ask_no() {
+    local prompt="$1"
+    local answer
+    echo -en "\n  ${YELLOW}?${NC}  ${BOLD}${prompt}${NC} ${DIM}[y/N]${NC} "
+    read -r answer </dev/tty
+    echo ""
+    [[ "$answer" =~ ^[Yy] ]] && return 0 || return 1
+}
+
+# Check if a command is available.
+has() { command -v "$1" &>/dev/null; }
 
 # ── Parse flags ───────────────────────────────────────────────────────────────
 SKIP_CLAUDE=false
@@ -43,68 +72,73 @@ Usage: ./setup.sh [--skip-claude] [--skip-codex] [--skip-ssh]" ;;
     esac
 done
 
-# ── Helpers ───────────────────────────────────────────────────────────────────
-
-# Ask a yes/no question. Returns 0 for yes, 1 for no.
-# Usage: ask "Install Claude CLI?" && do_something
-ask() {
-    local prompt="$1"
-    local answer
-    echo -en "  ${YELLOW}?${NC} ${prompt} [Y/n] "
-    read -r answer </dev/tty
-    [[ "$answer" =~ ^[Nn] ]] && return 1 || return 0
-}
-
-# Check if a command exists.
-has() { command -v "$1" &>/dev/null; }
-
-# Detect the OS and package manager.
-detect_os() {
-    if [ -f /etc/os-release ]; then
-        # shellcheck disable=SC1091
-        source /etc/os-release
-        OS_ID="${ID:-unknown}"
-        OS_LIKE="${ID_LIKE:-}"
-    else
-        OS_ID="unknown"
-        OS_LIKE=""
-    fi
-
-    if has apt-get; then
-        PKG_MANAGER="apt"
-    elif has dnf; then
-        PKG_MANAGER="dnf"
-    elif has yum; then
-        PKG_MANAGER="yum"
-    elif has pacman; then
-        PKG_MANAGER="pacman"
-    else
-        PKG_MANAGER="unknown"
-    fi
-}
-
-# Install a package using the detected package manager.
-install_pkg() {
-    local pkg="$1"
-    case "$PKG_MANAGER" in
-        apt)    sudo apt-get install -y "$pkg" ;;
-        dnf)    sudo dnf install -y "$pkg" ;;
-        yum)    sudo yum install -y "$pkg" ;;
-        pacman) sudo pacman -S --noconfirm "$pkg" ;;
-        *)      err "Unsupported package manager. Install '$pkg' manually and re-run." ;;
-    esac
-}
-
 # ── OS detection ──────────────────────────────────────────────────────────────
-detect_os
-
-section "System"
-log "OS: ${OS_ID}  |  Package manager: ${PKG_MANAGER}"
-
-# Ensure running on Linux.
 if [[ "$(uname -s)" != "Linux" ]]; then
-    err "This script is designed for Linux. Detected: $(uname -s)"
+    err "This script is for Linux only. Detected: $(uname -s)"
 fi
+
+OS_ID="unknown"
+if [ -f /etc/os-release ]; then
+    # shellcheck disable=SC1091
+    source /etc/os-release
+    OS_ID="${ID:-unknown}"
+fi
+
+if has apt-get;  then PKG="apt"
+elif has dnf;    then PKG="dnf"
+elif has yum;    then PKG="yum"
+elif has pacman; then PKG="pacman"
+else PKG="unknown"; fi
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Pre-flight: collect all choices BEFORE doing anything
+# ─────────────────────────────────────────────────────────────────────────────
+section "Setup plan"
+
+echo ""
+log "This script will:"
+bullet "Install Docker + Docker Compose (if missing)"
+bullet "Install Node.js (if Claude or Codex are needed)"
+
+WANT_CLAUDE=false
+WANT_CODEX=false
+WANT_SSH=false
+
+# Claude
+if [ "$SKIP_CLAUDE" = true ]; then
+    skip "Claude CLI  →  --skip-claude flag set"
+elif ask "Install Claude CLI (Anthropic)?"; then
+    WANT_CLAUDE=true
+    bullet "Install + authenticate Claude CLI"
+else
+    skip "Claude CLI"
+fi
+
+# Codex
+if [ "$SKIP_CODEX" = true ]; then
+    skip "Codex CLI  →  --skip-codex flag set"
+elif ask "Install Codex CLI (OpenAI)?"; then
+    WANT_CODEX=true
+    bullet "Install Codex CLI  (you will need your OPENAI_API_KEY)"
+else
+    skip "Codex CLI"
+fi
+
+# SSH
+if [ "$SKIP_SSH" = true ]; then
+    skip "SSH key  →  --skip-ssh flag set"
+elif ask "Set up SSH key for GitHub?"; then
+    WANT_SSH=true
+    bullet "Generate SSH key + add GitHub to known_hosts"
+else
+    skip "SSH key"
+fi
+
+bullet "Create workspace directory"
+bullet "Pull and start VS Code Server"
+
+echo ""
+ask "Ready to start?" || { log "Setup cancelled."; exit 0; }
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Step 1 — Docker
@@ -112,89 +146,95 @@ fi
 section "Docker"
 
 if has docker; then
-    DOCKER_VERSION=$(docker --version | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
-    ok "Docker already installed (${DOCKER_VERSION})"
+    DOCKER_VER=$(docker --version | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+    ok "Docker ${DOCKER_VER} already installed."
 else
-    warn "Docker not found."
-    if ask "Install Docker?"; then
-        log "Installing Docker via official install script ..."
-        curl -fsSL https://get.docker.com | sudo sh
-        # Add current user to docker group so we can run docker without sudo.
-        sudo usermod -aG docker "$USER"
-        ok "Docker installed. NOTE: log out and back in (or run 'newgrp docker') for group to take effect."
-    else
-        err "Docker is required. Re-run after installing Docker."
-    fi
+    warn "Docker not found — installing via get.docker.com ..."
+    curl -fsSL https://get.docker.com | sudo sh
+    # Allow the current user to run Docker without sudo.
+    sudo usermod -aG docker "$USER"
+    ok "Docker installed."
+    warn "You may need to log out and back in (or run 'newgrp docker') for"
+    warn "Docker group permissions to take effect in the current shell."
 fi
 
-# ── Docker Compose ────────────────────────────────────────────────────────────
+# Docker Compose (v2 plugin).
 if docker compose version &>/dev/null 2>&1; then
-    COMPOSE_VERSION=$(docker compose version --short 2>/dev/null || echo "v2")
-    ok "Docker Compose plugin already installed (${COMPOSE_VERSION})"
+    COMPOSE_VER=$(docker compose version --short 2>/dev/null || echo "v2")
+    ok "Docker Compose plugin ${COMPOSE_VER} already installed."
 elif has docker-compose; then
-    ok "docker-compose (standalone) found — note: 'docker compose' (v2) is preferred."
+    ok "docker-compose (standalone v1) found — will use it."
+    # Alias so 'docker compose' works throughout the rest of this script.
+    docker() { if [ "$1" = "compose" ]; then shift; docker-compose "$@"; else command docker "$@"; fi; }
 else
-    warn "Docker Compose not found."
-    if ask "Install Docker Compose plugin?"; then
-        case "$PKG_MANAGER" in
-            apt)
-                sudo apt-get update -qq
-                sudo apt-get install -y docker-compose-plugin
-                ;;
-            dnf|yum)
-                sudo "$PKG_MANAGER" install -y docker-compose-plugin
-                ;;
-            *)
-                # Fallback: install via pip or binary.
-                log "Installing Docker Compose via binary ..."
-                COMPOSE_URL="https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)"
-                sudo curl -fsSL "$COMPOSE_URL" -o /usr/local/bin/docker-compose
-                sudo chmod +x /usr/local/bin/docker-compose
-                ;;
-        esac
-        ok "Docker Compose installed."
-    else
-        err "Docker Compose is required. Re-run after installing it."
-    fi
+    warn "Docker Compose not found — installing ..."
+    case "$PKG" in
+        apt)
+            sudo apt-get update -qq
+            sudo apt-get install -y docker-compose-plugin
+            ;;
+        dnf|yum)
+            sudo "$PKG" install -y docker-compose-plugin
+            ;;
+        pacman)
+            sudo pacman -S --noconfirm docker-compose
+            ;;
+        *)
+            log "Installing Docker Compose binary ..."
+            COMPOSE_URL="https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)"
+            sudo curl -fsSL "$COMPOSE_URL" -o /usr/local/bin/docker-compose
+            sudo chmod +x /usr/local/bin/docker-compose
+            ;;
+    esac
+    ok "Docker Compose installed."
 fi
 
-# ── Docker daemon running ─────────────────────────────────────────────────────
+# Ensure Docker daemon is running.
 if ! docker info &>/dev/null 2>&1; then
-    warn "Docker daemon is not running. Attempting to start ..."
-    sudo systemctl start docker 2>/dev/null || sudo service docker start 2>/dev/null || true
+    warn "Docker daemon not running — starting ..."
+    sudo systemctl start docker 2>/dev/null \
+        || sudo service docker start 2>/dev/null \
+        || err "Could not start Docker daemon. Run: sudo systemctl start docker"
     sleep 2
-    if ! docker info &>/dev/null 2>&1; then
-        err "Docker daemon could not be started. Start it manually: sudo systemctl start docker"
-    fi
+    docker info &>/dev/null 2>&1 \
+        || err "Docker daemon still not responding after start attempt."
 fi
 ok "Docker daemon is running."
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Step 2 — Node.js (required for Claude and Codex CLIs)
+# Step 2 — Node.js (only if Claude or Codex are wanted)
 # ─────────────────────────────────────────────────────────────────────────────
 section "Node.js"
 
-NEED_NODE=false
-[[ "$SKIP_CLAUDE" = false ]] && NEED_NODE=true
-[[ "$SKIP_CODEX"  = false ]] && NEED_NODE=true
-
-if [ "$NEED_NODE" = false ]; then
-    skip "Node.js (not needed since Claude and Codex are both skipped)"
+if [ "$WANT_CLAUDE" = false ] && [ "$WANT_CODEX" = false ]; then
+    skip "Node.js  (not needed — Claude and Codex both skipped)"
 elif has node; then
-    NODE_VERSION=$(node --version)
-    ok "Node.js already installed (${NODE_VERSION})"
+    ok "Node.js $(node --version) already installed."
 else
-    warn "Node.js not found."
-    if ask "Install Node.js (LTS via NodeSource)?"; then
-        log "Installing Node.js LTS ..."
-        curl -fsSL https://deb.nodesource.com/setup_lts.x | sudo -E bash -
-        install_pkg nodejs
-        ok "Node.js installed ($(node --version))"
-    else
-        warn "Node.js skipped — Claude and Codex CLIs will not be installed."
-        SKIP_CLAUDE=true
-        SKIP_CODEX=true
-    fi
+    warn "Node.js not found — installing LTS ..."
+    case "$PKG" in
+        apt)
+            # NodeSource supports Debian/Ubuntu only.
+            curl -fsSL https://deb.nodesource.com/setup_lts.x | sudo -E bash -
+            sudo apt-get install -y nodejs
+            ;;
+        dnf)
+            # Node.js LTS via module stream.
+            sudo dnf module install -y nodejs:lts || sudo dnf install -y nodejs npm
+            ;;
+        yum)
+            curl -fsSL https://rpm.nodesource.com/setup_lts.x | sudo -E bash -
+            sudo yum install -y nodejs
+            ;;
+        pacman)
+            sudo pacman -S --noconfirm nodejs npm
+            ;;
+        *)
+            err "Cannot install Node.js automatically on this system.
+Install it manually from https://nodejs.org, then re-run ./setup.sh."
+            ;;
+    esac
+    ok "Node.js $(node --version) installed."
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -202,19 +242,12 @@ fi
 # ─────────────────────────────────────────────────────────────────────────────
 section "Claude CLI"
 
-if [ "$SKIP_CLAUDE" = true ]; then
+if [ "$WANT_CLAUDE" = false ]; then
     skip "Claude CLI"
 else
-    if ! ask "Set up Claude CLI?"; then
-        skip "Claude CLI"
-        SKIP_CLAUDE=true
-    fi
-fi
-
-if [ "$SKIP_CLAUDE" = false ]; then
-    # Install or update.
+    # Install if missing.
     if has claude; then
-        ok "Claude CLI already installed ($(claude --version 2>/dev/null || echo 'version unknown'))"
+        ok "Claude CLI already installed ($(claude --version 2>/dev/null || echo 'unknown version'))."
     else
         log "Installing Claude CLI ..."
         npm install -g @anthropic-ai/claude-code
@@ -226,7 +259,8 @@ if [ "$SKIP_CLAUDE" = false ]; then
     CLAUDE_OK=false
 
     if [ -f "$CLAUDE_CREDS" ] && grep -q '"accessToken"' "$CLAUDE_CREDS" 2>/dev/null; then
-        EXPIRES=$(grep -o '"expiresAt":[0-9]*' "$CLAUDE_CREDS" 2>/dev/null | grep -o '[0-9]*$' || echo "0")
+        EXPIRES=$(grep -o '"expiresAt":[0-9]*' "$CLAUDE_CREDS" 2>/dev/null \
+                  | grep -o '[0-9]*$' || echo "0")
         NOW_MS=$(( $(date +%s) * 1000 ))
         if [ "${EXPIRES:-0}" -gt "$NOW_MS" ] 2>/dev/null; then
             CLAUDE_OK=true
@@ -237,11 +271,12 @@ if [ "$SKIP_CLAUDE" = false ]; then
         ok "Claude already authenticated."
     else
         warn "Claude is not authenticated (or token expired)."
-        if ask "Authenticate Claude now? (opens browser)"; then
+        info "A browser window will open for OAuth login."
+        if ask "Authenticate Claude now?"; then
             claude auth login
             ok "Claude authentication complete."
         else
-            warn "Remember to run 'claude auth login' before using Claude."
+            warn "Skipped — run 'claude auth login' before using Claude."
         fi
     fi
 fi
@@ -251,17 +286,10 @@ fi
 # ─────────────────────────────────────────────────────────────────────────────
 section "Codex CLI"
 
-if [ "$SKIP_CODEX" = true ]; then
+if [ "$WANT_CODEX" = false ]; then
     skip "Codex CLI"
 else
-    if ! ask "Set up Codex CLI (OpenAI)?"; then
-        skip "Codex CLI"
-        SKIP_CODEX=true
-    fi
-fi
-
-if [ "$SKIP_CODEX" = false ]; then
-    # Install or update.
+    # Install if missing.
     if has codex; then
         ok "Codex CLI already installed."
     else
@@ -270,28 +298,38 @@ if [ "$SKIP_CODEX" = false ]; then
         ok "Codex CLI installed."
     fi
 
-    # Check authentication.
-    CODEX_KEY_FILE="$HOME/.codex/auth.json"
+    # Codex authenticates via OPENAI_API_KEY.
+    # Check common locations where it might already be set.
     CODEX_OK=false
-
-    if [ -f "$CODEX_KEY_FILE" ] && grep -q '"apiKey"\|"token"' "$CODEX_KEY_FILE" 2>/dev/null; then
+    if [ -n "${OPENAI_API_KEY:-}" ]; then
         CODEX_OK=true
-    elif [ -n "${OPENAI_API_KEY:-}" ]; then
+        ok "OPENAI_API_KEY is already set in the current environment."
+    elif grep -qE 'OPENAI_API_KEY' "$HOME/.bashrc" "$HOME/.zshrc" "$HOME/.profile" 2>/dev/null; then
         CODEX_OK=true
+        ok "OPENAI_API_KEY found in shell profile."
     fi
 
-    if [ "$CODEX_OK" = true ]; then
-        ok "Codex already authenticated."
-    else
-        warn "Codex is not authenticated."
-        if ask "Authenticate Codex now?"; then
-            codex auth login 2>/dev/null || codex login 2>/dev/null || {
-                warn "Auto-auth failed. Set your OpenAI API key manually:"
-                warn "  export OPENAI_API_KEY=sk-..."
-                warn "  or run: codex auth"
-            }
+    if [ "$CODEX_OK" = false ]; then
+        warn "OPENAI_API_KEY is not set. Codex needs it to work."
+        info "You can find your API key at: https://platform.openai.com/api-keys"
+        if ask "Enter your OpenAI API key now?"; then
+            echo -en "  Paste your key (sk-...): "
+            read -rs OPENAI_API_KEY_INPUT </dev/tty
+            echo ""
+            if [[ "$OPENAI_API_KEY_INPUT" == sk-* ]]; then
+                # Persist to ~/.bashrc and export for this session.
+                echo "" >> "$HOME/.bashrc"
+                echo "# OpenAI API key (added by Dev Center setup)" >> "$HOME/.bashrc"
+                echo "export OPENAI_API_KEY=\"${OPENAI_API_KEY_INPUT}\"" >> "$HOME/.bashrc"
+                export OPENAI_API_KEY="$OPENAI_API_KEY_INPUT"
+                ok "OPENAI_API_KEY saved to ~/.bashrc and active for this session."
+            else
+                warn "Key does not look valid (expected sk-...). Not saved."
+                warn "Set it manually: echo 'export OPENAI_API_KEY=sk-...' >> ~/.bashrc"
+            fi
         else
-            warn "Remember to authenticate Codex before use: codex auth"
+            warn "Skipped — add this to ~/.bashrc before using Codex:"
+            warn "  export OPENAI_API_KEY=sk-your-key-here"
         fi
     fi
 fi
@@ -301,10 +339,12 @@ fi
 # ─────────────────────────────────────────────────────────────────────────────
 section "SSH key (GitHub)"
 
-if [ "$SKIP_SSH" = true ]; then
+if [ "$WANT_SSH" = false ]; then
     skip "SSH key setup"
 else
     SSH_DIR="$HOME/.ssh"
+    mkdir -p "$SSH_DIR"
+    chmod 700 "$SSH_DIR"
     SSH_KEY=""
 
     for candidate in \
@@ -319,32 +359,43 @@ else
 
     if [ -n "$SSH_KEY" ]; then
         ok "SSH key found: $SSH_KEY"
+        info "If you haven't added this key to GitHub yet, here is your public key:"
+        echo ""
+        echo -e "  ${CYAN}$(cat "${SSH_KEY}.pub")${NC}"
+        echo ""
+        info "Add it at: https://github.com/settings/ssh/new"
     else
         warn "No SSH key found in $SSH_DIR."
-        if ask "Generate a new SSH key (ed25519)?"; then
-            echo -en "  Enter your email for the key label: "
+        info "An ed25519 key will be generated — the strongest and most compact type."
+        if ask "Generate a new SSH key?"; then
+            echo -en "  Enter your GitHub email: "
             read -r SSH_EMAIL </dev/tty
-            ssh-keygen -t ed25519 -C "${SSH_EMAIL:-dev-center}" -f "$SSH_DIR/id_ed25519" -N ""
+            echo ""
+            ssh-keygen -t ed25519 -C "${SSH_EMAIL:-dev-center}" \
+                       -f "$SSH_DIR/id_ed25519" -N ""
             SSH_KEY="$SSH_DIR/id_ed25519"
             ok "SSH key generated: $SSH_KEY"
             echo ""
-            log "Your public key (add this to GitHub → Settings → SSH keys):"
+            log "Add this public key to your GitHub account:"
+            info "  → https://github.com/settings/ssh/new"
             echo ""
-            cat "${SSH_KEY}.pub"
+            echo -e "  ${CYAN}$(cat "${SSH_KEY}.pub")${NC}"
             echo ""
+            ask_no "Press Enter once you have added it to GitHub, then continue." || true
         else
-            warn "No SSH key — private repo clones over SSH will fail."
+            warn "No SSH key — private repo clones over SSH will not work."
         fi
     fi
 
-    # Pre-seed GitHub in known_hosts to avoid interactive prompts in containers.
+    # Pre-seed GitHub in known_hosts to avoid interactive prompts.
     if [ -n "$SSH_KEY" ]; then
         KNOWN_HOSTS="$SSH_DIR/known_hosts"
         if ! grep -q "github.com" "$KNOWN_HOSTS" 2>/dev/null; then
             log "Adding github.com to known_hosts ..."
             ssh-keyscan -H github.com >> "$KNOWN_HOSTS" 2>/dev/null \
                 && ok "github.com added to known_hosts." \
-                || warn "ssh-keyscan failed — run manually: ssh-keyscan -H github.com >> ~/.ssh/known_hosts"
+                || warn "ssh-keyscan failed — run manually:
+    ssh-keyscan -H github.com >> ~/.ssh/known_hosts"
         else
             ok "github.com already in known_hosts."
         fi
@@ -354,54 +405,87 @@ fi
 # ─────────────────────────────────────────────────────────────────────────────
 # Step 6 — Workspace + .env
 # ─────────────────────────────────────────────────────────────────────────────
-section "Workspace"
+section "Configuration (.env)"
 
 if [ ! -f ".env" ]; then
     cp .env.example .env
     warn ".env created from .env.example."
-    warn "Edit WORKSPACE_DIR and VSCODE_PASSWORD in .env, then re-run ./setup.sh."
+    warn "Edit the two required values, then re-run ./setup.sh:"
+    warn ""
+    warn "  WORKSPACE_DIR   — absolute path where your projects will live"
+    warn "  VSCODE_PASSWORD — password to access VS Code in the browser"
+    warn ""
+    warn "  nano .env   (or your preferred editor)"
     exit 1
-else
-    ok ".env already exists."
 fi
+
+ok ".env already exists."
 
 # shellcheck disable=SC1091
 source .env
 
-[ -z "${WORKSPACE_DIR:-}" ]   && { warn "WORKSPACE_DIR not set in .env — edit .env and re-run."; exit 1; }
-[ -z "${VSCODE_PASSWORD:-}" ] && { warn "VSCODE_PASSWORD not set in .env — edit .env and re-run."; exit 1; }
+if [ -z "${WORKSPACE_DIR:-}" ]; then
+    err "WORKSPACE_DIR is not set in .env — edit it and re-run ./setup.sh."
+fi
+if [ -z "${VSCODE_PASSWORD:-}" ]; then
+    err "VSCODE_PASSWORD is not set in .env — edit it and re-run ./setup.sh."
+fi
+if [ "${VSCODE_PASSWORD}" = "changeme" ]; then
+    warn "VSCODE_PASSWORD is still set to 'changeme' — consider changing it in .env."
+fi
 
 mkdir -p "${WORKSPACE_DIR}"
-ok "Workspace directory ready: ${WORKSPACE_DIR}"
+ok "Workspace directory: ${WORKSPACE_DIR}"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Step 7 — Launch VS Code Server
 # ─────────────────────────────────────────────────────────────────────────────
 section "VS Code Server"
 
-log "Pulling latest image and starting container ..."
+PORT="${VSCODE_PORT:-8443}"
+
+log "Pulling latest image ..."
 docker compose pull --quiet
+
+log "Starting container ..."
 docker compose up -d
 
-# Wait for VS Code to be ready.
-PORT="${VSCODE_PORT:-8443}"
+# Wait up to 40 s for the server to respond.
 log "Waiting for VS Code Server on port ${PORT} ..."
+READY=false
 for _ in {1..20}; do
     if curl -sk "https://localhost:${PORT}" -o /dev/null 2>&1; then
+        READY=true
         break
     fi
     sleep 2
 done
 
-ok "VS Code Server is running."
+if [ "$READY" = true ]; then
+    ok "VS Code Server is running."
+else
+    warn "VS Code Server did not respond within 40s."
+    warn "Check container logs: docker compose logs vscode"
+fi
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Done
 # ─────────────────────────────────────────────────────────────────────────────
-section "Done"
+section "All done"
+
+HOST_IP=$(hostname -I 2>/dev/null | awk '{print $1}' || echo "localhost")
 
 echo ""
-log "Access VS Code at: http://$(hostname -I | awk '{print $1}'):${PORT}"
-log "Password: ${VSCODE_PASSWORD}"
-log "Workspace: ${WORKSPACE_DIR}"
+echo -e "  ${GREEN}${BOLD}VS Code Server is ready.${NC}"
+echo ""
+bullet "URL       : ${CYAN}http://${HOST_IP}:${PORT}${NC}"
+bullet "Password  : ${YELLOW}${VSCODE_PASSWORD}${NC}"
+bullet "Workspace : ${WORKSPACE_DIR}"
+echo ""
+
+[ "$WANT_CLAUDE" = true ] && bullet "Claude CLI : installed  — run ${CYAN}claude${NC} to use it"
+[ "$WANT_CODEX"  = true ] && bullet "Codex CLI  : installed  — run ${CYAN}codex${NC} to use it"
+[ "$WANT_SSH"    = true ] && [ -n "${SSH_KEY:-}" ] \
+    && bullet "SSH key    : ${SSH_KEY}  — add the .pub to GitHub if not done yet"
+
 echo ""
