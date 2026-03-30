@@ -259,7 +259,7 @@ else
         ok "Claude CLI already installed ($(claude --version 2>/dev/null || echo 'unknown version'))."
     else
         log "Installing Claude CLI ..."
-        npm install -g @anthropic-ai/claude-code
+        sudo npm install -g @anthropic-ai/claude-code
         ok "Claude CLI installed."
     fi
 
@@ -303,7 +303,7 @@ else
         ok "Codex CLI already installed."
     else
         log "Installing Codex CLI ..."
-        npm install -g @openai/codex
+        sudo npm install -g @openai/codex
         ok "Codex CLI installed."
     fi
 
