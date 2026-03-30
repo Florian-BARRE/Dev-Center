@@ -358,7 +358,9 @@ section "Workspace"
 
 if [ ! -f ".env" ]; then
     cp .env.example .env
-    warn ".env created from .env.example — edit WORKSPACE_DIR and VSCODE_PASSWORD, then run ./start.sh."
+    warn ".env created from .env.example."
+    warn "Edit WORKSPACE_DIR and VSCODE_PASSWORD in .env, then re-run ./setup.sh."
+    exit 1
 else
     ok ".env already exists."
 fi
@@ -366,20 +368,40 @@ fi
 # shellcheck disable=SC1091
 source .env
 
-if [ -n "${WORKSPACE_DIR:-}" ]; then
-    mkdir -p "${WORKSPACE_DIR}"
-    ok "Workspace directory ready: ${WORKSPACE_DIR}"
-else
-    warn "WORKSPACE_DIR not set in .env — edit .env before running ./start.sh."
-fi
+[ -z "${WORKSPACE_DIR:-}" ]   && { warn "WORKSPACE_DIR not set in .env — edit .env and re-run."; exit 1; }
+[ -z "${VSCODE_PASSWORD:-}" ] && { warn "VSCODE_PASSWORD not set in .env — edit .env and re-run."; exit 1; }
+
+mkdir -p "${WORKSPACE_DIR}"
+ok "Workspace directory ready: ${WORKSPACE_DIR}"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Step 7 — Launch VS Code Server
+# ─────────────────────────────────────────────────────────────────────────────
+section "VS Code Server"
+
+log "Pulling latest image and starting container ..."
+docker compose pull --quiet
+docker compose up -d
+
+# Wait for VS Code to be ready.
+PORT="${VSCODE_PORT:-8443}"
+log "Waiting for VS Code Server on port ${PORT} ..."
+for _ in {1..20}; do
+    if curl -sk "https://localhost:${PORT}" -o /dev/null 2>&1; then
+        break
+    fi
+    sleep 2
+done
+
+ok "VS Code Server is running."
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Done
 # ─────────────────────────────────────────────────────────────────────────────
-section "Setup complete"
+section "Done"
 
 echo ""
-log "All checks done. Next steps:"
-log "  1. Edit .env if you haven't already (WORKSPACE_DIR, VSCODE_PASSWORD)."
-log "  2. Run ./start.sh to launch VS Code Server."
+log "Access VS Code at: http://$(hostname -I | awk '{print $1}'):${PORT}"
+log "Password: ${VSCODE_PASSWORD}"
+log "Workspace: ${WORKSPACE_DIR}"
 echo ""

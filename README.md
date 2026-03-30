@@ -2,26 +2,34 @@
 
 VS Code Server in Docker — access your projects from any browser.
 
-## Quick Start
+## Setup
 
 ```bash
-# 1. Clone and enter the repo
 git clone git@github.com:Florian-BARRE/Dev-Center.git
 cd Dev-Center
 
-# 2. Run setup (installs Docker, Node, Claude, Codex, SSH key)
-chmod +x setup.sh start.sh
+# First run: creates .env from example, then exit to let you fill it in.
+chmod +x setup.sh
 ./setup.sh
 
-# 3. Edit .env
-cp .env.example .env   # already done by setup.sh
-nano .env              # set WORKSPACE_DIR and VSCODE_PASSWORD
-
-# 4. Start
-./start.sh
+# Edit .env (WORKSPACE_DIR, VSCODE_PASSWORD), then re-run.
+nano .env
+./setup.sh
 ```
 
-Open your browser at `http://<your-server-ip>:<VSCODE_PORT>`.
+`setup.sh` is idempotent — safe to re-run at any time.
+
+---
+
+## What `setup.sh` does
+
+1. **Docker + Docker Compose** — installs if missing
+2. **Node.js** — installs LTS if Claude or Codex are needed
+3. **Claude CLI** — optional, installs + handles auth
+4. **Codex CLI** — optional, installs + handles auth
+5. **SSH key** — optional, generates ed25519 + seeds GitHub known_hosts
+6. **Workspace** — creates `WORKSPACE_DIR` from `.env`
+7. **VS Code Server** — pulls image + starts container
 
 ---
 
@@ -36,27 +44,10 @@ Open your browser at `http://<your-server-ip>:<VSCODE_PORT>`.
 
 ---
 
-## `setup.sh` flags
+## Flags
 
 ```bash
-./setup.sh                        # interactive — asks for each optional step
-./setup.sh --skip-claude          # skip Claude CLI install + auth
-./setup.sh --skip-codex           # skip Codex CLI install + auth
-./setup.sh --skip-ssh             # skip SSH key setup
-```
-
-What `setup.sh` installs / checks:
-- Docker + Docker Compose
-- Node.js (required for Claude and Codex CLIs)
-- Claude CLI (`@anthropic-ai/claude-code`) — optional
-- Codex CLI (`@openai/codex`) — optional
-- SSH key for GitHub — optional
-
----
-
-## `start.sh` flags
-
-```bash
-./start.sh          # start (or restart) VS Code Server
-./start.sh --stop   # stop the container
+./setup.sh --skip-claude   # skip Claude CLI install + auth
+./setup.sh --skip-codex    # skip Codex CLI install + auth
+./setup.sh --skip-ssh      # skip SSH key setup
 ```
